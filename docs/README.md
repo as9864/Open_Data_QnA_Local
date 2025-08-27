@@ -6,6 +6,7 @@ This directory contains documentation and resources to help you understand and u
 * **best_practices.md:** Best practices and guidelines for using the library, including recommended configurations, tips for improving performance, and common pitfalls to avoid.
 * **faq.md:** Frequently asked questions about the library, covering common issues, troubleshooting tips, and general usage guidance.
 * **repo_structure.md:** A detailed explanation of the library's repository structure, including the purpose of each file and directory, and how to navigate the codebase.
+* **local_setup.md:** Instructions for configuring and running the application with local PostgreSQL or SQLite databases instead of Google Cloud services.
 
 
 ## How to Use This Documentation
