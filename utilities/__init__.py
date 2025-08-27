@@ -51,6 +51,8 @@ def format_prompt(context_prompt, **kwargs):
 
 # [CONFIG]
 EMBEDDING_MODEL = config['CONFIG']['EMBEDDING_MODEL']
+# Optional path for locally hosted embedding models
+EMBEDDING_MODEL_PATH = config['CONFIG'].get('EMBEDDING_MODEL_PATH', '')
 DESCRIPTION_MODEL = config['CONFIG']['DESCRIPTION_MODEL']
 # DATA_SOURCE = config['CONFIG']['DATA_SOURCE'] 
 VECTOR_STORE = config['CONFIG']['VECTOR_STORE']
@@ -86,27 +88,30 @@ FIRESTORE_REGION = config['CONFIG']['FIRESTORE_REGION']
 #[PROMPTS]
 PROMPTS = load_yaml(root_dir + '/prompts.yaml')
 
-__all__ = ["EMBEDDING_MODEL",
-           "DESCRIPTION_MODEL",
-          #"DATA_SOURCE",
-           "VECTOR_STORE",
-           #"CACHING",
-           #"DEBUGGING",
-           "LOGGING",
-           "EXAMPLES", 
-           "PROJECT_ID",
-           "PG_REGION",
-        #    "PG_SCHEMA",
-           "PG_INSTANCE",
-           "PG_DATABASE",
-           "PG_USER",
-           "PG_PASSWORD", 
-           "BQ_REGION",
-        #    "BQ_DATASET_NAME",
-           "BQ_OPENDATAQNA_DATASET_NAME",
-           "BQ_LOG_TABLE_NAME",
-        #    "BQ_TABLE_LIST",
-           "FIRESTORE_REGION",
-           "PROMPTS"
-           "root_dir",
-           "save_config"]
+__all__ = [
+    "EMBEDDING_MODEL",
+    "EMBEDDING_MODEL_PATH",
+    "DESCRIPTION_MODEL",
+    # "DATA_SOURCE",
+    "VECTOR_STORE",
+    # "CACHING",
+    # "DEBUGGING",
+    "LOGGING",
+    "EXAMPLES",
+    "PROJECT_ID",
+    "PG_REGION",
+    # "PG_SCHEMA",
+    "PG_INSTANCE",
+    "PG_DATABASE",
+    "PG_USER",
+    "PG_PASSWORD",
+    "BQ_REGION",
+    # "BQ_DATASET_NAME",
+    "BQ_OPENDATAQNA_DATASET_NAME",
+    "BQ_LOG_TABLE_NAME",
+    # "BQ_TABLE_LIST",
+    "FIRESTORE_REGION",
+    "PROMPTS",
+    "root_dir",
+    "save_config",
+]
