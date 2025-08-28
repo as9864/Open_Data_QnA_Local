@@ -5,14 +5,28 @@ import pandas as pd
 import numpy as np
 from pgvector.asyncpg import register_vector
 from google.cloud.sql.connector import Connector
-from langchain_community.embeddings import VertexAIEmbeddings
 from google.cloud import bigquery
 from dbconnectors import pgconnector
 from agents import EmbedderAgent
 from sqlalchemy.sql import text
-from utilities import PROJECT_ID, PG_INSTANCE, PG_DATABASE, PG_USER, PG_PASSWORD, PG_REGION, BQ_OPENDATAQNA_DATASET_NAME, BQ_REGION
+from utilities import (
+    PROJECT_ID,
+    PG_INSTANCE,
+    PG_DATABASE,
+    PG_USER,
+    PG_PASSWORD,
+    PG_REGION,
+    BQ_OPENDATAQNA_DATASET_NAME,
+    BQ_REGION,
+    EMBEDDING_MODEL,
+    EMBEDDING_MODEL_PATH,
+)
 
-embedder = EmbedderAgent('vertex')
+
+if EMBEDDING_MODEL == "local":
+    embedder = EmbedderAgent("local", EMBEDDING_MODEL_PATH)
+else:
+    embedder = EmbedderAgent(EMBEDDING_MODEL)
 
 
 async def setup_kgq_table( project_id,

@@ -38,71 +38,69 @@ def format_prompt(context_prompt, **kwargs):
     """Formats a context prompt by replacing placeholders with values."""
     return context_prompt.format(**kwargs)
 
+# [CONFIG]
+EMBEDDING_MODEL = config['CONFIG']['EMBEDDING_MODEL']
+# Optional path for locally hosted embedding models
+EMBEDDING_MODEL_PATH = config['CONFIG'].get('EMBEDDING_MODEL_PATH', '')
+DESCRIPTION_MODEL = config['CONFIG']['DESCRIPTION_MODEL']
+# DATA_SOURCE = config['CONFIG']['DATA_SOURCE'] 
+VECTOR_STORE = config['CONFIG']['VECTOR_STORE']
 
-# [CONFIG] (codex/add-top-level-mode-flag-and-local-config 기준)
-MODE = config["CONFIG"].get("MODE", "gcp").lower()
+#CACHING = config.getboolean('CONFIG','CACHING')
+#DEBUGGING = config.getboolean('CONFIG','DEBUGGING')
+LOGGING = config.getboolean('CONFIG','LOGGING')
+EXAMPLES = config.getboolean('CONFIG', 'KGQ_EXAMPLES')
+USE_SESSION_HISTORY = config.getboolean('CONFIG', 'USE_SESSION_HISTORY')
+USE_COLUMN_SAMPLES = config.getboolean('CONFIG','USE_COLUMN_SAMPLES')
 
-LOGGING = config.getboolean("CONFIG", "LOGGING")
-EXAMPLES = config.getboolean("CONFIG", "KGQ_EXAMPLES")
-USE_SESSION_HISTORY = config.getboolean("CONFIG", "USE_SESSION_HISTORY")
-USE_COLUMN_SAMPLES = config.getboolean("CONFIG", "USE_COLUMN_SAMPLES")
-FIRESTORE_REGION = config["CONFIG"].get("FIRESTORE_REGION", "")
+#[GCP]
+PROJECT_ID =  config['GCP']['PROJECT_ID']
 
-VECTOR_STORE = config["CONFIG"].get("VECTOR_STORE")
-EMBEDDING_MODEL = None
-DESCRIPTION_MODEL = None
+#[PGCLOUDSQL]
+PG_REGION = config['PGCLOUDSQL']['PG_REGION']
+# PG_SCHEMA = config['PGCLOUDSQL']['PG_SCHEMA'] 
+PG_INSTANCE = config['PGCLOUDSQL']['PG_INSTANCE']
+PG_DATABASE = config['PGCLOUDSQL']['PG_DATABASE'] 
+PG_USER = config['PGCLOUDSQL']['PG_USER'] 
+PG_PASSWORD = config['PGCLOUDSQL']['PG_PASSWORD']
 
-# Defaults (filled per MODE)
-PROJECT_ID = PG_REGION = PG_INSTANCE = PG_DATABASE = PG_USER = PG_PASSWORD = None
-BQ_REGION = BQ_OPENDATAQNA_DATASET_NAME = BQ_LOG_TABLE_NAME = None
-PG_CONN_STRING = None
+#[BIGQUERY]
+BQ_REGION = config['BIGQUERY']['BQ_DATASET_REGION']
+# BQ_DATASET_NAME = config['BIGQUERY']['BQ_DATASET_NAME']
+BQ_OPENDATAQNA_DATASET_NAME = config['BIGQUERY']['BQ_OPENDATAQNA_DATASET_NAME']
+BQ_LOG_TABLE_NAME = config['BIGQUERY']['BQ_LOG_TABLE_NAME']
+# BQ_TABLE_LIST = config['BIGQUERY']['BQ_TABLE_LIST']
 
-if MODE == "gcp":
-    EMBEDDING_MODEL = config["CONFIG"]["EMBEDDING_MODEL"]
-    DESCRIPTION_MODEL = config["CONFIG"]["DESCRIPTION_MODEL"]
+#[FIRESTORE]
+FIRESTORE_REGION = config['CONFIG']['FIRESTORE_REGION']
 
-    PROJECT_ID = config["GCP"]["PROJECT_ID"]
-
-    PG_REGION = config["PGCLOUDSQL"]["PG_REGION"]
-    PG_INSTANCE = config["PGCLOUDSQL"]["PG_INSTANCE"]
-    PG_DATABASE = config["PGCLOUDSQL"]["PG_DATABASE"]
-    PG_USER = config["PGCLOUDSQL"]["PG_USER"]
-    PG_PASSWORD = config["PGCLOUDSQL"]["PG_PASSWORD"]
-
-    BQ_REGION = config["BIGQUERY"]["BQ_DATASET_REGION"]
-    BQ_OPENDATAQNA_DATASET_NAME = config["BIGQUERY"]["BQ_OPENDATAQNA_DATASET_NAME"]
-    BQ_LOG_TABLE_NAME = config["BIGQUERY"]["BQ_LOG_TABLE_NAME"]
-
-elif MODE == "local":
-    # Local/dev mode: single Postgres connection string and local model endpoints/paths
-    PG_CONN_STRING = config["LOCAL"]["PG_CONN_STRING"]
-    EMBEDDING_MODEL = config["LOCAL"]["EMBEDDING_MODEL_PATH"]
-    DESCRIPTION_MODEL = config["LOCAL"]["LLM_ENDPOINT"]
-
-# [PROMPTS]
-PROMPTS = load_yaml(os.path.join(root_dir, "prompts.yaml"))
+#[PROMPTS]
+PROMPTS = load_yaml(root_dir + '/prompts.yaml')
 
 __all__ = [
-    "MODE",
     "EMBEDDING_MODEL",
+    "EMBEDDING_MODEL_PATH",
     "DESCRIPTION_MODEL",
+    # "DATA_SOURCE",
     "VECTOR_STORE",
+    # "CACHING",
+    # "DEBUGGING",
     "LOGGING",
     "EXAMPLES",
-    "USE_SESSION_HISTORY",
-    "USE_COLUMN_SAMPLES",
     "PROJECT_ID",
     "PG_REGION",
+    # "PG_SCHEMA",
     "PG_INSTANCE",
     "PG_DATABASE",
     "PG_USER",
     "PG_PASSWORD",
-    "PG_CONN_STRING",
     "BQ_REGION",
+    # "BQ_DATASET_NAME",
     "BQ_OPENDATAQNA_DATASET_NAME",
     "BQ_LOG_TABLE_NAME",
+    # "BQ_TABLE_LIST",
     "FIRESTORE_REGION",
     "PROMPTS",
     "root_dir",
-    "format_prompt",
+    "save_config",
 ]

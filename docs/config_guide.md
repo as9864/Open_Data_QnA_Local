@@ -4,7 +4,10 @@ ______________
 
 **[CONFIG]**
 
-**embedding_model = vertex**     *;Options: 'vertex' or 'vertex-lang'*
+**embedding_model = vertex**     *;Options: 'vertex', 'vertex-lang', or 'local'*
+
+**embedding_model_path = /path/to/model** *;Required when `embedding_model` is 'local'. Path to a
+locally downloaded `sentence-transformers` model*
 
 **description_model = gemini-1.0-pro**   *;Options 'gemini-1.0-pro', 'gemini-1.5-pro', 'text-bison-32k', 'gemini-1.5-flash'*
 
