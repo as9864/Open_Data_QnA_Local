@@ -1,26 +1,18 @@
 from abc import ABC
-from vertexai.language_models import CodeChatModel
-from vertexai.generative_models import GenerativeModel, Content, Part, GenerationConfig
-from .core import Agent 
-import pandas as pd
-import json
 from datetime import datetime
-from dbconnectors import pgconnector,bqconnector,firestoreconnector
-from utilities import PROMPTS, format_prompt
-from google.cloud.aiplatform import telemetry
-import vertexai 
-from utilities import PROJECT_ID, PG_REGION
-from vertexai.generative_models import GenerationConfig
 
-vertexai.init(project=PROJECT_ID, location=PG_REGION)
+from dbconnectors import pgconnector, bqconnector, firestoreconnector
+from utilities import PROMPTS, format_prompt
+
+from .core import Agent
 
 
 class BuildSQLAgent(Agent, ABC):
 
     agentType: str = "BuildSQLAgent"
 
-    def __init__(self, model_id = 'gemini-1.5-pro'): 
-        super().__init__(model_id=model_id)
+    def __init__(self, model_id: str = "gemini-1.5-pro", provider: str = "vertexai"):
+        super().__init__(model_id=model_id, provider=provider)
 
 
     def build_sql(self,source_type,user_grouping, user_question,session_history,tables_schema,columns_schema, similar_sql, max_output_tokens=2048, temperature=0.4, top_p=1, top_k=32):
@@ -57,41 +49,15 @@ class BuildSQLAgent(Agent, ABC):
             
         # Chat history Retrieval
 
-        chat_history=[]
-        for entry in session_history:
-            
-            timestamp = entry["timestamp"]
-            timestamp_str = timestamp.isoformat(timespec='auto')
-
-            user_message = Content(
-                parts=[Part.from_text(entry["user_question"])],  
-                role="user"
-            )
-
-            bot_message = Content(
-                parts=[Part.from_text(entry["bot_response"])],
-                role="assistant"
-            )
-            chat_history.extend([user_message, bot_message])  # Add both to the history
-        
-
-        # print("Chat History Retrieved")
-
-        if self.model_id == 'codechat-bison-32k':
-            with telemetry.tool_context_manager('opendataqna-buildsql-v2'):
-            
-                chat_session = self.model.start_chat(context=context_prompt)
-        elif 'gemini' in self.model_id:
-            with telemetry.tool_context_manager('opendataqna-buildsql-v2'):
-
-                # print("SQL Builder Agent : " + str(self.model_id))
-                config = GenerationConfig(
-                    max_output_tokens=max_output_tokens, temperature=temperature, top_p=top_p, top_k=top_k
-                )
-                chat_session = self.model.start_chat(history=chat_history,response_validation=False)
-                chat_session.send_message(context_prompt)
-        else:
-            raise ValueError('Invalid Model Specified')
+        # Initialize chat session with appropriate provider
+        chat_session = self.start_chat(
+            history=session_history,
+            context=context_prompt,
+            max_output_tokens=max_output_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+        )
         
 
         if session_history is None or not session_history:
@@ -123,12 +89,8 @@ class BuildSQLAgent(Agent, ABC):
         # print("BUILD CONTEXT ::: "+str(build_context_prompt))
 
 
-        with telemetry.tool_context_manager('opendataqna-buildsql-v2'):
-
-            response = chat_session.send_message(build_context_prompt, stream=False)
-            generated_sql = (str(response.text)).replace("```sql", "").replace("```", "")
-
-        generated_sql = (str(response.text)).replace("```sql", "").replace("```", "")
+        response = chat_session.send_message(build_context_prompt)
+        generated_sql = str(response).replace("```sql", "").replace("```", "")
         # print(generated_sql)
         return generated_sql
 

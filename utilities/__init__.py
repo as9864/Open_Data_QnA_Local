@@ -1,52 +1,41 @@
+"""Utility helpers and configuration loading."""
+
+from __future__ import annotations
+
 import configparser
 import os
-import sys
 import yaml
+
 
 config = configparser.ConfigParser()
 
-def is_root_dir():
-    """
-    Checks if the current working directory is the root directory of a project 
-    by looking for either the "/notebooks" or "/agents" folders.
 
-    Returns:
-        bool: True if either directory exists in the current directory, False otherwise.
-    """
-
+def is_root_dir() -> bool:
+    """Return True if the current working directory is the project root."""
     current_dir = os.getcwd()
-    print("current dir: ", current_dir)
     notebooks_path = os.path.join(current_dir, "notebooks")
     agents_path = os.path.join(current_dir, "agents")
-    
     return os.path.exists(notebooks_path) or os.path.exists(agents_path)
+
 
 def load_yaml(file_path: str) -> dict:
     with open(file_path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
-if is_root_dir():
-    current_dir = os.getcwd()
-    config.read(current_dir + '/config.ini')
-    root_dir = current_dir
-else:
-    root_dir = os.path.abspath(os.path.join(os.getcwd(), '..'))
-    config.read(root_dir+'/config.ini')
 
-if not 'root_dir' in locals():  # If not found in any parent dir
+# Determine root_dir and load config.ini
+if is_root_dir():
+    root_dir = os.getcwd()
+else:
+    root_dir = os.path.abspath(os.path.join(os.getcwd(), ".."))
+
+config.read(os.path.join(root_dir, "config.ini"))
+if not config.sections():
     raise FileNotFoundError("config.ini not found in current or parent directories.")
 
-print(f'root_dir set to: {root_dir}')
 
 def format_prompt(context_prompt, **kwargs):
-    """
-    Formats a context prompt by replacing placeholders with values from keyword arguments.
-    Args:
-        context_prompt (str): The prompt string containing placeholders (e.g., {var1}).
-        **kwargs: Keyword arguments representing placeholder names and their values.
-    Returns:
-        str: The formatted prompt with placeholders replaced.
-    """
+    """Formats a context prompt by replacing placeholders with values."""
     return context_prompt.format(**kwargs)
 
 # [CONFIG]
