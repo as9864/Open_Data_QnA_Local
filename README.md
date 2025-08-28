@@ -44,7 +44,8 @@ It is built on a modular design and currently supports the following components:
 ### Database Connectors
 * **Google Cloud SQL for PostgreSQL**
 * **Google BigQuery**
-* **Google Firestore(for storing session logs)**
+* **Google Firestore (for storing session logs)**
+* **Local PostgreSQL/SQLite connectors for offline development**
 
 ### Vector Stores 
 * **PGVector on Google Cloud SQL for PostgreSQL**
