@@ -56,7 +56,7 @@ It is built on a modular design and currently supports the following components:
 * **ValidateSQLAgent:** An agent that validates the syntax and semantic correctness of SQL queries. It uses a language model to analyze queries against a database schema and returns a JSON response indicating validity and potential errors.
 * **DebugSQLAgent:** An agent designed to debug and refine SQL queries for BigQuery or PostgreSQL databases. It interacts with a chat-based language model to iteratively troubleshoot queries, using error messages to generate alternative, correct queries.
 * **DescriptionAgent:** An agent specialized in generating descriptions for database tables and columns. It leverages a large language model to create concise and informative descriptions that aid in understanding data structures and facilitate SQL query generation.
-* **EmbedderAgent:** An agent specialized in generating text embeddings using Large Language Models (LLMs). It supports direct interaction with Vertex AI's TextEmbeddingModel or uses LangChain's VertexAIEmbeddings for a simplified interface.
+* **EmbedderAgent:** An agent specialized in generating text embeddings using Large Language Models (LLMs). It supports direct interaction with Vertex AI's TextEmbeddingModel, uses LangChain's VertexAIEmbeddings for a simplified interface, or loads local models via `sentence-transformers`.
 * **ResponseAgent:** An agent that generates natural language responses to user questions based on SQL query results. It acts as a data assistant, interpreting SQL results and transforming them into user-friendly answers using a language model.
 * **VisualizeAgent:** An agent that generates JavaScript code for Google Charts based on user questions and SQL results. It suggests suitable chart types and constructs the JavaScript code to create visualizations of the data.
 
@@ -193,6 +193,25 @@ ___________
 For setup we require details for vector store, source database etc. Edit the [config.ini](/config.ini) file and add values for the parameters based of below information.
 
 ℹ️ Follow the guidelines from the [config guide document](/docs/config_guide.md) to populate your [config.ini](/config.ini) file.
+
+**Using a local embedding model**
+
+1. Install the `sentence-transformers` library if it is not already available.
+2. Download and save a model. For example:
+
+   ```python
+   from sentence_transformers import SentenceTransformer
+   SentenceTransformer('all-MiniLM-L6-v2').save('/path/to/model')
+   ```
+
+3. Update `config.ini`:
+
+   ```ini
+   embedding_model = local
+   embedding_model_path = /path/to/model
+   ```
+
+The path should point to the directory containing the model weights.
 
 **Sources to connect**
 

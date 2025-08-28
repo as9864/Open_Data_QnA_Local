@@ -1,5 +1,5 @@
 from abc import ABC
-from .core import Agent 
+from .core import Agent
 from vertexai.language_models import TextEmbeddingModel
 
 
@@ -8,15 +8,18 @@ class EmbedderAgent(Agent, ABC):
     """
     An agent specialized in generating text embeddings using Large Language Models (LLMs).
 
-    This agent supports two modes for generating embeddings:
+    This agent supports three modes for generating embeddings:
 
     1. "vertex": Directly interacts with the Vertex AI TextEmbeddingModel.
     2. "lang-vertex": Uses LangChain's VertexAIEmbeddings for a streamlined interface.
+    3. "local": Loads a model from the local filesystem using the
+       `sentence-transformers` library.
 
     Attributes:
         agentType (str): Indicates the type of agent, fixed as "EmbedderAgent".
-        mode (str): The embedding generation mode ("vertex" or "lang-vertex").
-        model: The underlying embedding model (Vertex AI TextEmbeddingModel or LangChain's VertexAIEmbeddings).
+        mode (str): The embedding generation mode ("vertex", "lang-vertex", or
+            "local").
+        model: The underlying embedding model used to generate embeddings.
 
     Methods:
         create(question) -> list:
@@ -35,17 +38,26 @@ class EmbedderAgent(Agent, ABC):
 
     agentType: str = "EmbedderAgent"
 
-    def __init__(self, mode, embeddings_model='text-embedding-004'): 
-        if mode == 'vertex': 
-            self.mode = mode 
+    def __init__(self, mode, embeddings_model='text-embedding-004'):
+        if mode == 'vertex':
+            self.mode = mode
             self.model = TextEmbeddingModel.from_pretrained(embeddings_model)
 
-        elif mode == 'lang-vertex': 
-            self.mode = mode 
+        elif mode == 'lang-vertex':
+            self.mode = mode
             from langchain.embeddings import VertexAIEmbeddings
-            self.model = VertexAIEmbeddings() 
+            self.model = VertexAIEmbeddings()
 
-        else: raise ValueError('EmbedderAgent mode must be either vertex or lang-vertex')
+        elif mode == 'local':
+            self.mode = mode
+            from sentence_transformers import SentenceTransformer
+
+            self.model = SentenceTransformer(embeddings_model)
+
+        else:
+            raise ValueError(
+                "EmbedderAgent mode must be either vertex, lang-vertex, or local"
+            )
 
 
 
@@ -70,6 +82,14 @@ class EmbedderAgent(Agent, ABC):
             
             else: raise ValueError('Input must be either str or list')
 
-        elif self.mode == 'lang-vertex': 
+        elif self.mode == 'lang-vertex':
             vector = self.embeddings_service.embed_documents(question)
-            return vector           
+            return vector
+
+        elif self.mode == 'local':
+            if isinstance(question, str):
+                return self.model.encode(question).tolist()
+            elif isinstance(question, list):
+                return [self.model.encode(q).tolist() for q in question]
+            else:
+                raise ValueError('Input must be either str or list')
