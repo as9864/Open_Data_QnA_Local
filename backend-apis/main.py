@@ -36,6 +36,8 @@ from functools import wraps
 
 firebase_admin.initialize_app()
 
+from services.chat import generate_sql_results as chat_generate_sql_results
+
 from opendataqna import (
     get_all_databases,
     get_kgq,
@@ -44,7 +46,6 @@ from opendataqna import (
     get_response,
     get_results,
     visualize,
-    run_pipeline,
     generate_uuid,
 )
 
@@ -229,24 +230,10 @@ async def chat():
         uid = getattr(request, "uid", "unknown")
         log.info("/chat request - uid=%s session_id=%s time=%s", uid, session_id, datetime.datetime.utcnow().isoformat())
 
-        final_sql, results_df, response = await run_pipeline(
+        final_sql, results_df, response = await chat_generate_sql_results(
             session_id,
-            user_question,
             user_grouping,
-            RUN_DEBUGGER=RUN_DEBUGGER,
-            EXECUTE_FINAL_SQL=EXECUTE_FINAL_SQL,
-            DEBUGGING_ROUNDS=DEBUGGING_ROUNDS,
-            LLM_VALIDATION=LLM_VALIDATION,
-            Embedder_model=Embedder_model,
-            SQLBuilder_model=SQLBuilder_model,
-            SQLChecker_model=SQLChecker_model,
-            SQLDebugger_model=SQLDebugger_model,
-            num_table_matches=num_table_matches,
-            num_column_matches=num_column_matches,
-            table_similarity_threshold=table_similarity_threshold,
-            column_similarity_threshold=column_similarity_threshold,
-            example_similarity_threshold=example_similarity_threshold,
-            num_sql_matches=num_sql_matches,
+            user_question,
         )
         results_json = (
             results_df.to_json(orient="records")

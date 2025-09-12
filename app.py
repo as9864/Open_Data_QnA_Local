@@ -16,7 +16,8 @@ from streamlit.components.v1 import html
 from streamlit.logger import get_logger
 
 # 외부 모듈
-from opendataqna import generate_uuid, get_all_databases, run_pipeline, get_kgq
+from opendataqna import generate_uuid, get_all_databases, get_kgq
+from services.chat import generate_sql_results as chat_generate_sql_results
 
 # ---------- 로깅 포맷 ----------
 logging.basicConfig(
@@ -134,37 +135,6 @@ def get_known_sql(selected_schema: str) -> pd.DataFrame:
         return pd.DataFrame([])
 
 
-def generate_sql_results(selected_schema: str, user_question: str):
-    """
-    사용자의 질문으로 SQL을 생성/실행하고 (SQL, 결과 DataFrame, 자연어 응답) 반환.
-    """
-    logger.info("generating response for user question - %s", user_question)
-    logger.info("selected user grouping - %s", selected_schema)
-    final_sql, results_df, response = asyncio.run(
-        run_pipeline(
-            st.session_state.session_id if in_streamlit_runtime() else generate_uuid(),
-            user_question,
-            selected_schema,
-            RUN_DEBUGGER=True,
-            EXECUTE_FINAL_SQL=True,
-            DEBUGGING_ROUNDS=2,
-            LLM_VALIDATION=False,
-            Embedder_model='local',  # 'vertex' 또는 'vertex-lang' 등
-            SQLBuilder_model='gemini-1.5-pro',
-            SQLChecker_model='gemini-1.5-pro',
-            SQLDebugger_model='gemini-1.5-pro',
-            Responder_model='gemini-1.5-pro',
-            num_table_matches=5,
-            num_column_matches=10,
-            table_similarity_threshold=0.1,
-            column_similarity_threshold=0.1,
-            example_similarity_threshold=0.1,
-            num_sql_matches=3
-        )
-    )
-    return final_sql, (results_df if isinstance(results_df, pd.DataFrame) else pd.DataFrame([])), response
-
-
 def generate_response(prompt: str):
     """
     채팅 UI에 생성된 SQL/자연어 응답/결과를 순서대로 표시.
@@ -183,7 +153,13 @@ def generate_response(prompt: str):
     st.chat_message("assistant").write(progress_msg)
 
     # SQL 생성/실행
-    query, results, response = generate_sql_results(st.session_state.user_grouping, prompt)
+    query, results, response = asyncio.run(
+        chat_generate_sql_results(
+            st.session_state.session_id if in_streamlit_runtime() else None,
+            st.session_state.user_grouping,
+            prompt,
+        )
+    )
 
     # 생성된 SQL
     st.session_state.messages.append({"role": "assistant", "content": query})
