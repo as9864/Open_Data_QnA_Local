@@ -162,9 +162,11 @@ class DebugSQLAgent(Agent, ABC):
                         LLM_VALIDATION=False):
         i = 0  
         STOP = False 
-        invalid_response = False 
+        invalid_response = False
+
         chat_session = self.init_chat(source_type,user_grouping,tables_schema,columns_schema,similar_sql)
         sql = query.replace("```sql","").replace("```","").replace("EXPLAIN ANALYZE ","")
+
 
         AUDIT_TEXT=AUDIT_TEXT+"\n\nEntering the debugging steps!"
         while (not STOP):

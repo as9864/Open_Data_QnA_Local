@@ -38,7 +38,7 @@ class EmbedderAgent(Agent, ABC):
 
     agentType: str = "EmbedderAgent"
 
-    def __init__(self, mode, embeddings_model='text-embedding-004'):
+    def __init__(self, mode, embeddings_model="BAAI/bge-m3"):
         if mode == 'vertex':
             self.mode = mode
             self.model = TextEmbeddingModel.from_pretrained(embeddings_model)

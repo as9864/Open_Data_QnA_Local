@@ -67,7 +67,7 @@ def jwt_authenticated(func: Callable[..., int]) -> Callable[..., int]:
 
 RUN_DEBUGGER = True
 DEBUGGING_ROUNDS = 2 
-LLM_VALIDATION = False
+LLM_VALIDATION = True
 EXECUTE_FINAL_SQL = True
 Embedder_model = 'vertex'
 SQLBuilder_model = 'gemini-1.5-pro'

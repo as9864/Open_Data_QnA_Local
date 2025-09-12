@@ -2,11 +2,22 @@ import asyncio
 import argparse
 import uuid
 
-from agents import EmbedderAgent, BuildSQLAgent, DebugSQLAgent, ValidateSQLAgent, ResponseAgent,VisualizeAgent
+from agents import EmbedderAgent, BuildSQLAgent_Local, DebugSQLAgent_Local, ValidateSQLAgent, ResponseAgent,VisualizeAgent
 from utilities import (PROJECT_ID, PG_REGION, BQ_REGION, EXAMPLES, LOGGING, VECTOR_STORE,
                        BQ_OPENDATAQNA_DATASET_NAME, USE_SESSION_HISTORY)
 from dbconnectors import bqconnector, pgconnector, firestoreconnector
 from embeddings.store_embeddings import add_sql_embedding
+
+from agents.Agent_local import LocalOllamaResponder as ResponderClass
+
+#Local Ollama Responder Model
+Responder = ResponderClass(
+    model="qwen3:4b-instruct",  # ← 권장(양자화로 CPU 쾌적)
+    max_tokens=220,
+    temperature=0.2,
+    preview_rows=5,
+    host="http://localhost:11434"
+)
 
 
 
@@ -17,6 +28,11 @@ if VECTOR_STORE=='bigquery-vector':
     call_await = False
 
 elif VECTOR_STORE == 'cloudsql-pgvector':
+    region=PG_REGION
+    vector_connector = pgconnector
+    call_await=True
+
+elif VECTOR_STORE == 'local-pgvector':
     region=PG_REGION
     vector_connector = pgconnector
     call_await=True
@@ -181,10 +197,17 @@ async def generate_sql(session_id,
         ## LOAD AGENTS 
 
         print("Loading Agents.")
-        embedder = EmbedderAgent(Embedder_model) 
-        SQLBuilder = BuildSQLAgent(SQLBuilder_model)
+        embedder = EmbedderAgent(Embedder_model)
+        SQLBuilder = BuildSQLAgent_Local.BuildSQLAgent_Local(
+            model="qwen3:4b-instruct",  # ollama pull qwen2.5:3b-instruct-q4_K_M
+            host="http://localhost:11434",
+            max_tokens=1024,
+            temperature=0.2,
+            top_p=0.9,
+            timeout_sec=300,
+        )
         SQLChecker = ValidateSQLAgent(SQLChecker_model)
-        SQLDebugger = DebugSQLAgent(SQLDebugger_model)
+        SQLDebugger = DebugSQLAgent_Local.DebugSQLAgent_Local(model="qwen3:4b-instruct", host="http://localhost:11434")
 
         re_written_qe=user_question
 
@@ -232,6 +255,9 @@ async def generate_sql(session_id,
 
         else: exact_sql_history = None 
 
+
+
+
         # If exact user query has been found, retrieve the SQL and skip Generation Pipeline 
         if exact_sql_history is not None:
             found_in_vector = 'Y' 
@@ -241,25 +267,35 @@ async def generate_sql(session_id,
 
 
         else:
-            # No exact match found. Proceed looking for similar entries in db IF kgq is enabled 
+            # No exact match found. Proceed looking for similar entries in db IF kgq is enabled
+
             if EXAMPLES: 
                 AUDIT_TEXT = AUDIT_TEXT +  process_step + "\nNo exact match found in query cache, retrieving relevant schema and known good queries for few shot examples using similarity search...."
                 process_step = "\n\nGet Similar Match: "
+
                 if call_await:
                     similar_sql = await vector_connector.getSimilarMatches('example', user_grouping, embedded_question, num_sql_matches, example_similarity_threshold)
+
                 else:
                     similar_sql = vector_connector.getSimilarMatches('example', user_grouping, embedded_question, num_sql_matches, example_similarity_threshold)
 
+
             else: similar_sql = "No similar SQLs provided..."
+
+
 
             process_step = "\n\nGet Table and Column Schema: "
             # Retrieve matching tables and columns
-            if call_await: 
+            if call_await:
+
                 table_matches =  await vector_connector.getSimilarMatches('table', user_grouping, embedded_question, num_table_matches, table_similarity_threshold)
                 column_matches =  await vector_connector.getSimilarMatches('column', user_grouping, embedded_question, num_column_matches, column_similarity_threshold)
+
             else:
+
                 table_matches =  vector_connector.getSimilarMatches('table', user_grouping, embedded_question, num_table_matches, table_similarity_threshold)
                 column_matches =  vector_connector.getSimilarMatches('column', user_grouping, embedded_question, num_column_matches, column_similarity_threshold)
+
 
             AUDIT_TEXT = AUDIT_TEXT +  process_step + "\nRetrieved Similar Known Good Queries, Table Schema and Column Schema: \n" + '\nRetrieved Tables: \n' + str(table_matches) + '\n\nRetrieved Columns: \n' + str(column_matches) + '\n\nRetrieved Known Good Queries: \n' + str(similar_sql)
             
@@ -271,8 +307,10 @@ async def generate_sql(session_id,
                 process_step = "\n\nBuild SQL: "
                 generated_sql = SQLBuilder.build_sql(DATA_SOURCE,user_grouping,user_question,session_history,table_matches,column_matches,similar_sql)
                 final_sql=generated_sql
+
+
                 AUDIT_TEXT = AUDIT_TEXT + process_step +  "\nGenerated SQL : " + str(generated_sql)
-                
+                # print("AUDIT_TEXT 10", AUDIT_TEXT)
                 if 'unrelated_answer' in generated_sql :
                     invalid_response=True
                     final_sql="This is an unrelated question or you are not asking a valid query"
@@ -284,6 +322,7 @@ async def generate_sql(session_id,
                     if RUN_DEBUGGER: 
                         generated_sql, invalid_response, AUDIT_TEXT = SQLDebugger.start_debugger(DATA_SOURCE,user_grouping, generated_sql, user_question, SQLChecker, table_matches, column_matches, AUDIT_TEXT, similar_sql, DEBUGGING_ROUNDS, LLM_VALIDATION) 
                         # AUDIT_TEXT = AUDIT_TEXT + '\n Feedback from Debugger: \n' + feedback_text
+
 
                     final_sql=generated_sql
                     AUDIT_TEXT = AUDIT_TEXT + "\nFinal SQL after Debugger: \n" +str(final_sql)
@@ -298,7 +337,7 @@ async def generate_sql(session_id,
         # print(f'\n\n AUDIT_TEXT: \n {AUDIT_TEXT}')
 
         if LOGGING: 
-            bqconnector.make_audit_entry(DATA_SOURCE, user_grouping, SQLBuilder_model, user_question, final_sql, found_in_vector, "", process_step, error_msg,AUDIT_TEXT)  
+            pgconnector.make_audit_entry(DATA_SOURCE, user_grouping, SQLBuilder_model, user_question, final_sql, found_in_vector, "", process_step, error_msg,AUDIT_TEXT)
 
 
     except Exception as e:
@@ -307,8 +346,8 @@ async def generate_sql(session_id,
         invalid_response=True
         AUDIT_TEXT=AUDIT_TEXT+ "\nException at SQL generation"
         print("Error :: "+str(error_msg))
-        if LOGGING: 
-            bqconnector.make_audit_entry(DATA_SOURCE, user_grouping, SQLBuilder_model, user_question, final_sql, found_in_vector, "", process_step, error_msg,AUDIT_TEXT)  
+        if LOGGING:
+            pgconnector.make_audit_entry(DATA_SOURCE, user_grouping, SQLBuilder_model, user_question, final_sql, found_in_vector, "", process_step, error_msg,AUDIT_TEXT)
 
     if USE_SESSION_HISTORY and not invalid_response:
         firestoreconnector.log_chat(session_id,user_question,final_sql,user_id)
@@ -367,7 +406,7 @@ def get_results(user_grouping, final_sql, invalid_response=False, EXECUTE_FINAL_
                         result_df = "Please enable the Execution of the final SQL so I can provide an answer" 
                         invalid_response = True
                         
-            except ValueError: 
+            except ValueError as e:
                 result_df= "Error has been encountered :: " + str(e)
                 invalid_response=True
                 
@@ -383,19 +422,28 @@ def get_results(user_grouping, final_sql, invalid_response=False, EXECUTE_FINAL_
 
 def get_response(session_id,user_question,result_df,Responder_model='gemini-1.0-pro'):
     try:
-        Responder = ResponseAgent(Responder_model)
+
+
+        # Responder = ResponseAgent(Responder_model)
 
         if session_id is None or session_id=="":
             print("This is a new session")
+
         else:
+
             session_history =firestoreconnector.get_chat_logs_for_session(session_id) if USE_SESSION_HISTORY else None
+
             if session_history is None or not session_history:
+
                 print("No records for the session. Not rewriting the question\n")
             else:
+
                 concated_questions,re_written_qe=Responder.rewrite_question(user_question,session_history)
                 user_question=re_written_qe
-        
+
+
         _resp=Responder.run(user_question, result_df)
+
         invalid_response=False
     except Exception as e: 
         print(f"An error occured. Aborting... Error Message: {e}")

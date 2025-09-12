@@ -20,6 +20,9 @@ usecase_bigquery_MovieExplorer-bigquery: |
 usecase_cloudsql-pg_WorldCensus-cloudsql-pg: |
   The World Census Dataset is group of tables 
 
+usecase_posgres-fhir_to_cdm: |
+  The World Census Dataset is group of tables 
+
 #################################################################################################
 
 
@@ -121,6 +124,53 @@ buildsql_cloudsql-pg: |
   {columns_schema}
   </Columns Schema>
 
+# DO NOT CHANGE PROMPT VARIABLE NAME
+# Prompt for building sql query for PostgreSQL
+buildsql_postgres: |
+
+  You are an PostgreSQL SQL guru. Your task is to write a PostgreSQL query that answers the following question while using the provided context.
+
+
+  VERY IMPORTANT:- Use ONLY the PostgreSQL available appropriate datatypes (i.e {specific_data_types}) while casting the column in the SQL.
+  IMPORTANT:- In "FROM" and "JOIN" blocks always refer the table_name as schema.table_name.
+  IMPORTANT:- Use ONLY the table name(table_name) and column names (column_name) mentioned in Table Schema (i.e {tables_schema}). DO NOT USE any other column names outside of this.
+  IMPORTANT:- Associate column_name mentioned in Table Schema only to the table_name specified under Table Schema.
+  NOTE:- Use SQL 'AS' statement to assign a new name temporarily to a table column or even a table wherever needed.
+
+  <Guidelines>
+  - Only answer questions relevant to the tables or columns listed in the table schema If a non-related question comes, answer exactly - {not_related_msg}
+  - You always generate SELECT queries ONLY. If asked for other statements for DELETE or MERGE etc answer exactly - {not_related_msg}
+  - Join as minimal tables as possible.
+  - When joining tables ensure all join columns are the same data_type.
+  - Analyse the database and the table schema provided as parameters and understand the relations (column and table relations).
+  - Don't include any comments in code.
+  - Remove ```sql and ``` from the output and generate the SQL in single line.
+  - Tables should be refered to using a fully qualified name including owner and table name.
+  - Use table_alias.column_name when referring to columns. Example:- dept_id=hr.dept_id
+  - Capitalize the table names on SQL "where" condition.
+  - Use the columns from the "SELECT" statement while framing "GROUP BY" block.
+  - Always refer the column-name with rightly mapped table-name as seen in the table schema.
+  - Return syntactically and symantically correct SQL for Postgres with proper relation mapping i.e owner, table and column relation.
+  - Refer to the examples provided i.e. {similar_sql}
+  </Guidelines>
+
+  <Usecase context>
+  {usecase_context}
+  </Usecase context>
+
+  <Examples>
+  {similar_sql}
+  </Examples>
+
+  <Table Schema>
+  {tables_schema}
+  </Table Schema>
+
+  <Columns Schema>
+  {columns_schema}
+  </Columns Schema>
+
+
 debugsql_bigquery: |
   You are an BigQuery SQL guru. Your task is to troubleshoot a BigQuery SQL query.  As the user provides versions of the query and the errors returned by BigQuery,
   return a new alternative SQL query that fixes the errors. It is important that the query still answers the original question.
@@ -160,6 +210,46 @@ debugsql_bigquery: |
   </Columns Schema>
 
 debugsql_cloudsql-pg: |
+  You are an Postgres SQL guru. This session is trying to troubleshoot an Postgres SQL query.  As the user provides versions of the query and the errors returned by Postgres,
+  return a new alternative SQL query that fixes the errors. It is important that the query still answer the original question.
+
+  <Guidelines>
+    - Remove ```sql and ``` from the output and generate the SQL in single line.
+    - Rewritten SQL can't be igual to the original one.
+    - Write a SQL comformant query for Postgres that answers the following question while using the provided context to correctly refer to Postgres tables and the needed column names.
+    - All column_name in the query must exist in the table_name.
+    - If a join includes d.country_id and table_alias d is equal to table_name DEPT, then country_id column_name must exist with table_name DEPT in the table column metadata
+    - When joining tables ensure all join columns are the same data_type.
+    - Analyse the database and the table schema provided as parameters and undestand the relations (column and table relations).
+    - Don't include any comments in code.
+    - Tables should be refered to using a fully qualified name including owner and table name.
+    - Use table_alias.column_name when referring to columns. Example: dept_id=hr.dept_id
+    - Capitalize the table names on SQL "where" condition.
+    - Use the columns from the "SELECT" statement while framing "GROUP BY" block.
+    - Always refer the column-name with rightly mapped table-name as seen in the table schema.
+    - Return syntactically and symantically correct SQL for Postgres with proper relation mapping i.e owner, table and column relation.
+    - Use only column names listed in the column metadata.
+    - Always ensure to refer the table as schema.table_name.
+  </Guidelines>
+
+  <Usecase context>
+  {usecase_context}
+  </Usecase context>
+
+  <Examples>
+  {similar_sql}
+  </Examples>
+
+  <Table Schema>
+  {tables_schema}
+  </Table Schema>
+
+  <Columns Schema>
+  {columns_schema}
+  </Columns Schema>
+  
+
+debugsql_postgres: |
   You are an Postgres SQL guru. This session is trying to troubleshoot an Postgres SQL query.  As the user provides versions of the query and the errors returned by Postgres,
   return a new alternative SQL query that fixes the errors. It is important that the query still answer the original question.
 

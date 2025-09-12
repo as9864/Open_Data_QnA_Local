@@ -44,7 +44,7 @@ class BuildSQLAgent(Agent, ABC):
                                        tables_schema=tables_schema, 
                                        columns_schema = columns_schema)
 
-        # print(f"Prompt to Build SQL: \n{context_prompt}") 
+        print(f"Prompt to Build SQL: \n{context_prompt}")
 
             
         # Chat history Retrieval

@@ -1,7 +1,8 @@
+from .store_embeddings import store_embeddings as store_schema_embeddings, store_embeddings
 from .retrieve_embeddings import retrieve_embeddings
-from .store_embeddings import store_schema_embeddings
-from .kgq_embeddings import store_kgq_embeddings, setup_kgq_table, load_kgq_df
 
-
-
-__all__ = ["retrieve_embeddings", "store_schema_embeddings","store_kgq_embeddings", "setup_kgq_table", "load_kgq_df"]
+__all__ = [
+    "retrieve_embeddings",
+    "store_embeddings",
+    "store_schema_embeddings",  # 과거 코드 호환용
+]

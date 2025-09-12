@@ -368,7 +368,18 @@ class PgConnector(DBConnector, ABC):
         FROM example_prompt_sql_embeddings
         WHERE lower(example_user_question) = lower('{query}') LIMIT 1; """
 
+
+        print("getExactMatches : " , check_history_sql)
+
+        print("getExactMatches2 : ", query)
+
+
+
+
         exact_sql_history = self.retrieve_df(check_history_sql)
+
+        print("getExactMatches3 : ", exact_sql_history)
+
 
         if exact_sql_history[exact_sql_history.columns[0]].count() != 0:
             sql_example_txt = ''

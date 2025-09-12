@@ -37,7 +37,7 @@ class ResponseAgent(Agent, ABC):
                                        user_question = user_question,
                                        sql_result = sql_result)
                                        
-        # print(f"Prompt for Natural Language Response: \n{context_prompt}")
+        print(f"Prompt for Natural Language Response: \n{context_prompt}")
 
         generated_sql = self.generate_llm_response(context_prompt)
         return generated_sql

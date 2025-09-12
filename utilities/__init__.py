@@ -29,7 +29,8 @@ if is_root_dir():
 else:
     root_dir = os.path.abspath(os.path.join(os.getcwd(), ".."))
 
-config.read(os.path.join(root_dir, "config.ini"))
+config_path = os.path.join(root_dir, "config.ini")
+config.read(config_path, encoding="utf-8")  # 필요 시 "utf-8-sig"
 if not config.sections():
     raise FileNotFoundError("config.ini not found in current or parent directories.")
 
@@ -38,69 +39,94 @@ def format_prompt(context_prompt, **kwargs):
     """Formats a context prompt by replacing placeholders with values."""
     return context_prompt.format(**kwargs)
 
-# [CONFIG]
-EMBEDDING_MODEL = config['CONFIG']['EMBEDDING_MODEL']
+
+# =========================
+# [CONFIG] (안전한 fallback 포함)
+# =========================
+# MODE
+MODE = config.get("CONFIG", "MODE", fallback="gcp").lower()
+
+# 기본 옵션들
+EMBEDDING_MODEL = config.get("CONFIG", "EMBEDDING_MODEL", fallback="")
 # Optional path for locally hosted embedding models
-EMBEDDING_MODEL_PATH = config['CONFIG'].get('EMBEDDING_MODEL_PATH', '')
-DESCRIPTION_MODEL = config['CONFIG']['DESCRIPTION_MODEL']
-# DATA_SOURCE = config['CONFIG']['DATA_SOURCE'] 
-VECTOR_STORE = config['CONFIG']['VECTOR_STORE']
+EMBEDDING_MODEL_PATH = config.get("CONFIG", "EMBEDDING_MODEL_PATH", fallback="")
+DESCRIPTION_MODEL = config.get("CONFIG", "DESCRIPTION_MODEL", fallback="")
+VECTOR_STORE = config.get("CONFIG", "VECTOR_STORE", fallback="")
 
-#CACHING = config.getboolean('CONFIG','CACHING')
-#DEBUGGING = config.getboolean('CONFIG','DEBUGGING')
-LOGGING = config.getboolean('CONFIG','LOGGING')
-EXAMPLES = config.getboolean('CONFIG', 'KGQ_EXAMPLES')
-USE_SESSION_HISTORY = config.getboolean('CONFIG', 'USE_SESSION_HISTORY')
-USE_COLUMN_SAMPLES = config.getboolean('CONFIG','USE_COLUMN_SAMPLES')
+LOGGING = config.getboolean("CONFIG", "LOGGING", fallback=False)
+EXAMPLES = config.getboolean("CONFIG", "KGQ_EXAMPLES", fallback=False)
+USE_SESSION_HISTORY = config.getboolean("CONFIG", "USE_SESSION_HISTORY", fallback=True)
+USE_COLUMN_SAMPLES = config.getboolean("CONFIG", "USE_COLUMN_SAMPLES", fallback=True)
 
-#[GCP]
-PROJECT_ID =  config['GCP']['PROJECT_ID']
+# [GCP]
+PROJECT_ID = config.get("GCP", "PROJECT_ID", fallback="")
 
-#[PGCLOUDSQL]
-PG_REGION = config['PGCLOUDSQL']['PG_REGION']
-# PG_SCHEMA = config['PGCLOUDSQL']['PG_SCHEMA'] 
-PG_INSTANCE = config['PGCLOUDSQL']['PG_INSTANCE']
-PG_DATABASE = config['PGCLOUDSQL']['PG_DATABASE'] 
-PG_USER = config['PGCLOUDSQL']['PG_USER'] 
-PG_PASSWORD = config['PGCLOUDSQL']['PG_PASSWORD']
+# [PGCLOUDSQL]
+PG_REGION = config.get("PGCLOUDSQL", "PG_REGION", fallback="")
+PG_INSTANCE = config.get("PGCLOUDSQL", "PG_INSTANCE", fallback="")
+PG_DATABASE = config.get("PGCLOUDSQL", "PG_DATABASE", fallback="")
+PG_USER = config.get("PGCLOUDSQL", "PG_USER", fallback="")
+PG_PASSWORD = config.get("PGCLOUDSQL", "PG_PASSWORD", fallback="")
 
-#[BIGQUERY]
-BQ_REGION = config['BIGQUERY']['BQ_DATASET_REGION']
-# BQ_DATASET_NAME = config['BIGQUERY']['BQ_DATASET_NAME']
-BQ_OPENDATAQNA_DATASET_NAME = config['BIGQUERY']['BQ_OPENDATAQNA_DATASET_NAME']
-BQ_LOG_TABLE_NAME = config['BIGQUERY']['BQ_LOG_TABLE_NAME']
-# BQ_TABLE_LIST = config['BIGQUERY']['BQ_TABLE_LIST']
 
-#[FIRESTORE]
-FIRESTORE_REGION = config['CONFIG']['FIRESTORE_REGION']
+# [BIGQUERY]
+BQ_REGION = config.get("BIGQUERY", "BQ_DATASET_REGION", fallback="")
+BQ_OPENDATAQNA_DATASET_NAME = config.get("BIGQUERY", "BQ_OPENDATAQNA_DATASET_NAME", fallback="")
+BQ_LOG_TABLE_NAME = config.get("BIGQUERY", "BQ_LOG_TABLE_NAME", fallback="")
 
-#[PROMPTS]
-PROMPTS = load_yaml(root_dir + '/prompts.yaml')
+# [FIRESTORE]
+FIRESTORE_REGION = config.get("CONFIG", "FIRESTORE_REGION", fallback="")
+
+# PROMPTS
+PROMPTS = load_yaml(os.path.join(root_dir, "prompts.yaml"))
+
+# =========================================
+# Backward-compat for dbconnectors imports
+# =========================================
+# If CONFIG.CONNECTOR_BACKEND is missing, derive it from MODE.
+CONNECTOR_BACKEND = config.get(
+    "CONFIG", "CONNECTOR_BACKEND",
+    fallback=("cloud" if MODE == "gcp" else "local"),
+)
+
+# Support both PG_CONN and PG_CONN_STRING keys for local
+LOCAL_PG_CONN = (
+    config.get("LOCAL", "PG_CONN", fallback="")
+    or config.get("LOCAL", "PG_CONN_STRING", fallback="")
+)
+LOCAL_SQLITE_DB = config.get("LOCAL", "SQLITE_DB", fallback="opendataqna.db")
+PG_CONN_STRING = config.get("LOCAL","PG_CONN_STRING", fallback="")
+
+PG_LOCAL = config.get("LOCAL", "pglocal", fallback="postgres")
+LOCAL_USER_GROUPING =  config.get("LOCAL", "user_grouping", fallback="fhir_to_cdm")
+
 
 __all__ = [
+    "MODE",
     "EMBEDDING_MODEL",
     "EMBEDDING_MODEL_PATH",
     "DESCRIPTION_MODEL",
-    # "DATA_SOURCE",
     "VECTOR_STORE",
-    # "CACHING",
-    # "DEBUGGING",
     "LOGGING",
     "EXAMPLES",
+    "USE_SESSION_HISTORY",
+    "USE_COLUMN_SAMPLES",
     "PROJECT_ID",
     "PG_REGION",
-    # "PG_SCHEMA",
     "PG_INSTANCE",
     "PG_DATABASE",
     "PG_USER",
     "PG_PASSWORD",
     "BQ_REGION",
-    # "BQ_DATASET_NAME",
     "BQ_OPENDATAQNA_DATASET_NAME",
     "BQ_LOG_TABLE_NAME",
-    # "BQ_TABLE_LIST",
     "FIRESTORE_REGION",
     "PROMPTS",
     "root_dir",
-    "save_config",
+    "format_prompt",
+    # 호환 심볼
+    "CONNECTOR_BACKEND",
+    "LOCAL_PG_CONN",
+    "LOCAL_SQLITE_DB",
+    "PG_CONN_STRING",
 ]
