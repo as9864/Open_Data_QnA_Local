@@ -53,6 +53,23 @@ module_path = os.path.abspath(os.path.join('.'))
 sys.path.append(module_path)
 
 
+log.basicConfig(level=log.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+SESSION_TIMEOUT_SECONDS = 1800
+_session_store: dict[str, datetime.datetime] = {}
+
+
+def validate_session(session_id: str) -> tuple[str, bool]:
+    now = datetime.datetime.utcnow()
+    new_session = False
+    expiry = _session_store.get(session_id)
+    if not session_id or expiry is None or expiry < now:
+        session_id = generate_uuid()
+        new_session = True
+    _session_store[session_id] = now + datetime.timedelta(seconds=SESSION_TIMEOUT_SECONDS)
+    return session_id, new_session
+
+
 def jwt_authenticated(func: Callable[..., int]) -> Callable[..., int]:
     @wraps(func)
     async def decorated_function(*args, **kwargs):
@@ -201,14 +218,16 @@ def getSQLResult():
 
 
 @app.route("/chat", methods=["POST"])
+@jwt_authenticated
 async def chat():
     try:
         envelope = request.get_json()
         user_question = envelope.get("user_question")
         user_grouping = envelope.get("user_grouping")
-        session_id = envelope.get("session_id")
-        if not session_id:
-            session_id = generate_uuid()
+
+        session_id, new_session = validate_session(envelope.get("session_id"))
+        uid = getattr(request, "uid", "unknown")
+        log.info("/chat request - uid=%s session_id=%s time=%s", uid, session_id, datetime.datetime.utcnow().isoformat())
 
         final_sql, results_df, response = await run_pipeline(
             session_id,
@@ -234,14 +253,16 @@ async def chat():
             if isinstance(results_df, pd.DataFrame)
             else results_df
         )
-        return jsonify(
-            {
-                "session_id": session_id,
-                "sql": final_sql,
-                "response": response,
-                "results": results_json,
-            }
-        )
+        resp = {
+            "session_id": session_id,
+            "sql": final_sql,
+            "response": response,
+            "results": results_json,
+        }
+        if new_session:
+            resp["session_reset"] = True
+        log.info("/chat response - uid=%s session_id=%s time=%s", uid, session_id, datetime.datetime.utcnow().isoformat())
+        return jsonify(resp)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
