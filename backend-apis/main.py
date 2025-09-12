@@ -36,7 +36,17 @@ from functools import wraps
 
 firebase_admin.initialize_app()
 
-from opendataqna import get_all_databases,get_kgq,generate_sql,embed_sql,get_response,get_results,visualize
+from opendataqna import (
+    get_all_databases,
+    get_kgq,
+    generate_sql,
+    embed_sql,
+    get_response,
+    get_results,
+    visualize,
+    run_pipeline,
+    generate_uuid,
+)
 
 
 module_path = os.path.abspath(os.path.join('.'))
@@ -187,6 +197,53 @@ def getSQLResult():
                 } 
     return jsonify(responseDict)
 
+
+
+
+@app.route("/chat", methods=["POST"])
+async def chat():
+    try:
+        envelope = request.get_json()
+        user_question = envelope.get("user_question")
+        user_grouping = envelope.get("user_grouping")
+        session_id = envelope.get("session_id")
+        if not session_id:
+            session_id = generate_uuid()
+
+        final_sql, results_df, response = await run_pipeline(
+            session_id,
+            user_question,
+            user_grouping,
+            RUN_DEBUGGER=RUN_DEBUGGER,
+            EXECUTE_FINAL_SQL=EXECUTE_FINAL_SQL,
+            DEBUGGING_ROUNDS=DEBUGGING_ROUNDS,
+            LLM_VALIDATION=LLM_VALIDATION,
+            Embedder_model=Embedder_model,
+            SQLBuilder_model=SQLBuilder_model,
+            SQLChecker_model=SQLChecker_model,
+            SQLDebugger_model=SQLDebugger_model,
+            num_table_matches=num_table_matches,
+            num_column_matches=num_column_matches,
+            table_similarity_threshold=table_similarity_threshold,
+            column_similarity_threshold=column_similarity_threshold,
+            example_similarity_threshold=example_similarity_threshold,
+            num_sql_matches=num_sql_matches,
+        )
+        results_json = (
+            results_df.to_json(orient="records")
+            if isinstance(results_df, pd.DataFrame)
+            else results_df
+        )
+        return jsonify(
+            {
+                "session_id": session_id,
+                "sql": final_sql,
+                "response": response,
+                "results": results_json,
+            }
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 
