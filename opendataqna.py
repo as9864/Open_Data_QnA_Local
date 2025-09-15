@@ -1,6 +1,7 @@
 import asyncio
 import argparse
 import uuid
+import pandas as pd
 
 from agents import EmbedderAgent, BuildSQLAgent_Local, DebugSQLAgent_Local, ValidateSQLAgent, ResponseAgent,VisualizeAgent
 from utilities import (PROJECT_ID, PG_REGION, BQ_REGION, EXAMPLES, LOGGING, VECTOR_STORE,
@@ -419,6 +420,63 @@ def get_results(user_grouping, final_sql, invalid_response=False, EXECUTE_FINAL_
         invalid_response=True
 
     return result_df,invalid_response
+
+
+def get_results_multi(user_sql_map: dict[str, str], EXECUTE_FINAL_SQL: bool = True):
+    """Execute multiple SQL queries and merge the results into a single DataFrame.
+
+    For each ``(user_grouping, sql)`` pair provided, this function runs the
+    query using :func:`get_results` and collects the resulting
+    :class:`pandas.DataFrame`. Successful results are merged into a single
+    ``DataFrame`` either by concatenation or by merging on common columns. Any
+    queries that fail will have their error messages stored and returned.
+
+    Args:
+        user_sql_map (dict[str, str]): Mapping of ``user_grouping`` to SQL
+            query.
+        EXECUTE_FINAL_SQL (bool, optional): Whether to execute the provided SQL
+            queries. Defaults to ``True``.
+
+    Returns:
+        tuple: A tuple containing:
+            - pandas.DataFrame or ``None``: Combined results of all successful
+              queries. ``None`` if all queries fail.
+            - dict[str, str]: Mapping of ``user_grouping`` values to error
+              messages for any queries that failed.
+    """
+
+    dfs: list[pd.DataFrame] = []
+    errors: dict[str, str] = {}
+
+    for user_grouping, sql in user_sql_map.items():
+        try:
+            result_df, invalid_response = get_results(
+                user_grouping, sql, EXECUTE_FINAL_SQL=EXECUTE_FINAL_SQL
+            )
+            if not invalid_response and isinstance(result_df, pd.DataFrame):
+                dfs.append(result_df)
+            else:
+                errors[user_grouping] = str(result_df)
+        except Exception as e:  # pylint: disable=broad-except
+            errors[user_grouping] = str(e)
+
+    combined_df: pd.DataFrame | None = None
+    if dfs:
+        # Determine common columns across all DataFrames
+        common_cols = set(dfs[0].columns)
+        for df in dfs[1:]:
+            common_cols &= set(df.columns)
+
+        if common_cols:
+            combined_df = dfs[0]
+            for df in dfs[1:]:
+                combined_df = pd.merge(
+                    combined_df, df, on=list(common_cols), how="outer"
+                )
+        else:
+            combined_df = pd.concat(dfs, ignore_index=True, sort=False)
+
+    return combined_df, errors
 
 def get_response(session_id,user_question,result_df,Responder_model='gemini-1.0-pro'):
     try:
