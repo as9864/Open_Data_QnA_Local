@@ -339,5 +339,50 @@ gcloud resource-manager org-policies delete iam.allowedPolicyMemberDomains --pro
     }
     ```
 
+8. Embed Papers : Store paper documents and their embeddings
+
+    URI: /papers/embed
+    Method: POST
+
+    Request Payload:
+    ```
+    [
+      {
+        "title": "Example title",
+        "abstract": "Optional abstract",
+        "content": "Full document text",
+        "metadata": {"source": "demo"}
+      }
+    ]
+    ```
+
+    Request response:
+    ```
+    {
+    "inserted": 1
+    }
+    ```
+
+9. Search Papers : Find similar papers using vector search
+
+    URI: /papers/search
+    Method: POST
+
+    Request Payload:
+    ```
+    {
+    "query": "climate change",
+    "k": 5,
+    "summarize": true
+    }
+    ```
+
+    Request response:
+    ```
+    {
+    "results": [{"id": 1, "title": "Example title", "abstract": "Optional abstract", "metadata": {"source": "demo"}}],
+    "summary": "Optional natural language summary"
+    }
+    ```
 
 ### For setting up the demo UI with these endpoints please refer to README.md under [`/frontend`](/frontend/)

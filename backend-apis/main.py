@@ -34,6 +34,10 @@ import firebase_admin
 from firebase_admin import credentials, auth
 from functools import wraps
 
+from embeddings.store_papers import _prepare_records, store_papers, _pg_connect
+from agents import EmbedderAgent, ResponseAgent
+from pgvector.psycopg import register_vector
+
 firebase_admin.initialize_app()
 
 from services.chat import generate_sql_results as chat_generate_sql_results
@@ -522,5 +526,66 @@ async def getResultsResponse():
 
    return jsonify(responseDict)  
    
+@app.route("/papers/embed", methods=["POST"])
+def embed_papers():
+    """Embed paper documents and store them in Postgres."""
+    docs = request.get_json(silent=True)
+    if not docs:
+        return jsonify({"Error": "No documents provided"}), 400
+    if isinstance(docs, dict):
+        docs = [docs]
+    try:
+        records = _prepare_records(docs)
+        inserted = store_papers(records)
+        return jsonify({"inserted": inserted}), 201
+    except Exception as e:  # pragma: no cover - error path
+        log.exception("Failed to store papers")
+        return jsonify({"Error": str(e)}), 500
+
+
+@app.route("/papers/search", methods=["POST"])
+def search_papers():
+    """Search embedded papers and optionally summarise results."""
+    payload = request.get_json(silent=True) or {}
+    query = payload.get("query")
+    k = int(payload.get("k", 5))
+    summarize = bool(payload.get("summarize"))
+    if not query:
+        return jsonify({"Error": "Query text required"}), 400
+
+    embedder = EmbedderAgent("local", "BAAI/bge-m3")
+    query_emb = embedder.create(query)
+
+    with _pg_connect() as conn:
+        register_vector(conn)
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, title, abstract, metadata
+                FROM papers_embeddings
+                ORDER BY embedding <=> %s
+                LIMIT %s;
+                """,
+                (query_emb, k),
+            )
+            rows = cur.fetchall()
+
+    results = [
+        {
+            "id": r[0],
+            "title": r[1],
+            "abstract": r[2],
+            "metadata": r[3],
+        }
+        for r in rows
+    ]
+
+    response = {"results": results}
+    if summarize and results:
+        responder = ResponseAgent("gemini-1.5-pro")
+        response["summary"] = responder.run(query, json.dumps(results))
+    return jsonify(response)
+
+
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
