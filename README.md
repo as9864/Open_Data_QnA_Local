@@ -8,12 +8,12 @@
         <img src="utilities/imgs/opendataqna_logo.png" alt="logo" width="400" height="auto">
     </a>
 </p>
-<h1 align="center">Open Data QnA - Chat with your SQL Database</h1> 
+<h1 align="center">Open Data QnA Local - Chat with your SQL Database</h1> 
 
 _______________
 
 <div align="center"">
-  <strong>🚨 Version 2.0.0 is now live! Refer to the <a href="docs/changelog.md">Release Notes</a> for detailed information on updates and fixes. 🚨</strong>
+  <strong>🚨 Version 2.0.1 해당 버전에서는 기존의 Cloud 기반 환경에서 Postgres와 Ollama를 활용한 Local버전으로 변경 🚨</strong>
 </div>
 
 _______________
