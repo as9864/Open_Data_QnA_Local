@@ -385,4 +385,23 @@ gcloud resource-manager org-policies delete iam.allowedPolicyMemberDomains --pro
     }
     ```
 
+10. OMOP Concept Chat : Retrieve OMOP CDM vocabulary details for a concept code or term
+
+    URI: /omop/concept_chat
+    Method: POST
+
+    Request Payload:
+    ```
+    {
+      "question": "What concept represents ICD10 code E11?"
+    }
+    ```
+
+    Request response:
+    ```
+    {
+      "answer": "...model generated OMOP concept summary..."
+    }
+    ```
+
 ### For setting up the demo UI with these endpoints please refer to README.md under [`/frontend`](/frontend/)

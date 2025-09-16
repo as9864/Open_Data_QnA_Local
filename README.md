@@ -404,6 +404,29 @@ For detailed steps and known issues refer to  README.md under [`/terraform`](/te
 ---------------------------------------------------
 Deploy backend apis for the solution, refer to the README.md under [`/backend-apis`](/backend-apis/). This APIs are designed with work with the frontend and provide access to run the solution.
 
+### OMOP Concept Chat API
+
+The backend now exposes a lightweight endpoint to ask vocabulary questions against the OMOP CDM catalog.
+
+* **Endpoint:** `POST /omop/concept_chat`
+* **Request body:**
+
+  ```json
+  {
+    "question": "What is the standard concept for SNOMED code 22298006?"
+  }
+  ```
+
+* **Response:**
+
+  ```json
+  {
+    "answer": "...model generated summary..."
+  }
+  ```
+
+Send the `question` field with the concept code or term you want to explore to receive curated OMOP concept details.
+
 Once the backend APIs deployed successfully deploy the frontend for the solution, refer to the README.md under [`/frontend`](/frontend/).
 
 
