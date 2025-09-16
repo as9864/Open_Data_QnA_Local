@@ -41,6 +41,7 @@ from pgvector.psycopg import register_vector
 firebase_admin.initialize_app()
 
 from services.chat import generate_sql_results as chat_generate_sql_results
+from services.omop_concept_chat import run as concept_chat_run
 
 from opendataqna import (
     get_all_databases,
@@ -257,6 +258,16 @@ async def chat():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+
+@app.route("/omop/concept_chat", methods=["POST"])
+async def omop_concept_chat():
+    payload = request.get_json(silent=True) or {}
+    question = payload.get("question", "")
+    if not question:
+        return jsonify({"Error": "question required"}), 400
+    answer = await concept_chat_run(question)
+    return jsonify({"answer": answer})
 
 
 @app.route("/get_known_sql", methods=["POST"])

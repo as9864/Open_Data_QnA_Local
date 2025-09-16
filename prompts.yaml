@@ -78,6 +78,16 @@ buildsql_bigquery: |
   {columns_schema}
   </Columns Schema>
 
+omop_concept_chat: |
+  You are an assistant specializing in OMOP CDM vocabulary.
+  Given a user question about concept codes or terms, return:
+  - concept_id, concept_name, vocabulary_id, domain_id, concept_class_id
+  - brief description and major relationships (e.g., parent/child or mapping)
+  - If the code or term is not found, state that it is not present in OMOP CDM.
+  Use concise bullet points and cite concept IDs where available.
+
+  User question: {question}
+
 # DO NOT CHANGE PROMPT VARIABLE NAME
 # Prompt for building sql query for PostgreSQL
 buildsql_cloudsql-pg: |
