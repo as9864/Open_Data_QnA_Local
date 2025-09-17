@@ -13,13 +13,12 @@ from agents.Agent_local import LocalOllamaResponder as ResponderClass
 
 #Local Ollama Responder Model
 Responder = ResponderClass(
-    model="qwen3:4b-instruct",  # ← 권장(양자화로 CPU 쾌적)
+    model="qwen3:8b",  # ← 권장(양자화로 CPU 쾌적)
     max_tokens=220,
     temperature=0.2,
     preview_rows=5,
-    host="http://localhost:11434"
+    host="http://192.168.0.230:11434"
 )
-
 
 
 #Based on VECTOR STORE in config.ini initialize vector connector and region
@@ -200,15 +199,15 @@ async def generate_sql(session_id,
         print("Loading Agents.")
         embedder = EmbedderAgent(Embedder_model)
         SQLBuilder = BuildSQLAgent_Local.BuildSQLAgent_Local(
-            model="qwen3:4b-instruct",  # ollama pull qwen2.5:3b-instruct-q4_K_M
-            host="http://localhost:11434",
+            model="qwen3:8b",  # ollama pull qwen2.5:3b-instruct-q4_K_M
+            host="http://192.168.0.230:11434",
             max_tokens=1024,
             temperature=0.2,
             top_p=0.9,
             timeout_sec=300,
         )
         SQLChecker = ValidateSQLAgent(SQLChecker_model)
-        SQLDebugger = DebugSQLAgent_Local.DebugSQLAgent_Local(model="qwen3:4b-instruct", host="http://localhost:11434")
+        SQLDebugger = DebugSQLAgent_Local.DebugSQLAgent_Local(model="qwen3:8b", host="http://192.168.0.230:11434")
 
         re_written_qe=user_question
 

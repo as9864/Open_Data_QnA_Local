@@ -19,8 +19,10 @@ class DebugSQLAgent_Local:
 
     def __init__(
         self,
-        model: str = "qwen3:4b-instruct",         # Ollama 모델명 (BuildSQLAgent_Local와 통일)
-        host: str = "http://localhost:11434",    # Ollama 기본 호스트
+        # model: str = "qwen3:4b-instruct",         # Ollama 모델명 (BuildSQLAgent_Local와 통일)
+        # host: str = "http://localhost:11434",    # Ollama 기본 호스트
+        model: str = "qwen3:8b",
+        host: str = "http://192.168.0.230:11434",
         max_tokens: int = 1024,
         temperature: float = 0.2,
         top_p: float = 1.0,

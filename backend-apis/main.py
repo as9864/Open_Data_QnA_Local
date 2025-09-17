@@ -35,13 +35,27 @@ from firebase_admin import credentials, auth
 from functools import wraps
 
 from embeddings.store_papers import _prepare_records, store_papers, _pg_connect
-from agents import EmbedderAgent, ResponseAgent
+from agents import EmbedderAgent
 from pgvector.psycopg import register_vector
 
 firebase_admin.initialize_app()
 
 from services.chat import generate_sql_results as chat_generate_sql_results
 from services.omop_concept_chat import run as concept_chat_run
+
+
+from agents.Agent_local import LocalOllamaResponder as ResponderClass
+
+#Local Ollama Responder Model
+Responder = ResponderClass(
+    model="qwen3:8b",  # ← 권장(양자화로 CPU 쾌적)
+    max_tokens=220,
+    temperature=0.2,
+    preview_rows=5,
+    host="http://192.168.0.230:11434"
+)
+
+
 
 from opendataqna import (
     get_all_databases,
@@ -102,7 +116,7 @@ RUN_DEBUGGER = True
 DEBUGGING_ROUNDS = 2 
 LLM_VALIDATION = True
 EXECUTE_FINAL_SQL = True
-Embedder_model = 'vertex'
+Embedder_model = 'local'
 SQLBuilder_model = 'gemini-1.5-pro'
 SQLChecker_model = 'gemini-1.5-pro'
 SQLDebugger_model = 'gemini-1.5-pro'
@@ -574,7 +588,7 @@ def search_papers():
                 """
                 SELECT id, title, abstract, metadata
                 FROM papers_embeddings
-                ORDER BY embedding <=> %s
+                ORDER BY embedding <=> %s::vector
                 LIMIT %s;
                 """,
                 (query_emb, k),
@@ -593,8 +607,11 @@ def search_papers():
 
     response = {"results": results}
     if summarize and results:
-        responder = ResponseAgent("gemini-1.5-pro")
-        response["summary"] = responder.run(query, json.dumps(results))
+        # responder = R
+
+        print("check Results" , results)
+        print("check query", query)
+        response["summary"] = Responder.run_paper(query, json.dumps(results))
     return jsonify(response)
 
 
