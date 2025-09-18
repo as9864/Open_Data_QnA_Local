@@ -280,8 +280,13 @@ async def omop_concept_chat():
     question = payload.get("question", "")
     if not question:
         return jsonify({"Error": "question required"}), 400
-    answer = await concept_chat_run(question)
-    return jsonify({"answer": answer})
+    top_k = payload.get("top_k")
+    try:
+        top_k_int = int(top_k) if top_k is not None else 5
+    except (TypeError, ValueError):
+        top_k_int = 5
+    answer_payload = await concept_chat_run(question, top_k=top_k_int)
+    return jsonify(answer_payload)
 
 
 @app.route("/get_known_sql", methods=["POST"])
