@@ -48,7 +48,7 @@ from agents.Agent_local import LocalOllamaResponder as ResponderClass
 
 #Local Ollama Responder Model
 Responder = ResponderClass(
-    model="qwen3:8b",  # ← 권장(양자화로 CPU 쾌적)
+    model="hopephoto/Qwen3-4B-Instruct-2507_q8",  # ← 권장(양자화로 CPU 쾌적)
     max_tokens=220,
     temperature=0.2,
     preview_rows=5,
@@ -117,9 +117,9 @@ DEBUGGING_ROUNDS = 2
 LLM_VALIDATION = True
 EXECUTE_FINAL_SQL = True
 Embedder_model = 'local'
-SQLBuilder_model = 'gemini-1.5-pro'
-SQLChecker_model = 'gemini-1.5-pro'
-SQLDebugger_model = 'gemini-1.5-pro'
+SQLBuilder_model = 'hopephoto/Qwen3-4B-Instruct-2507_q8'
+SQLChecker_model = 'hopephoto/Qwen3-4B-Instruct-2507_q8'
+SQLDebugger_model = 'hopephoto/Qwen3-4B-Instruct-2507_q8'
 num_table_matches = 5
 num_column_matches = 10
 table_similarity_threshold = 0.3
@@ -238,7 +238,7 @@ def getSQLResult():
 
 
 @app.route("/chat", methods=["POST"])
-@jwt_authenticated
+# @jwt_authenticated
 async def chat():
     try:
         envelope = request.get_json()

@@ -42,7 +42,7 @@ class LocalOllamaResponder:
     """
 
 
-    def __init__(self, model: str = "qwen3:8b",
+    def __init__(self, model: str = "hopephoto/Qwen3-4B-Instruct-2507_q8",
                  max_tokens: int = 220,
                  temperature: float = 0.2,
                  preview_rows: int = 5,

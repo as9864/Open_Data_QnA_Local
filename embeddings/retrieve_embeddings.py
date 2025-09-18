@@ -39,7 +39,7 @@ _desc_model = (DESCRIPTION_MODEL or "").strip().lower()
 _use_desc = _desc_model not in ("", "none", "off")
 
 if _use_desc:
-    descriptor = DescriptionAgent(DESCRIPTION_MODEL)
+    descriptor = DescriptionAgent.DescriptionAgent(DESCRIPTION_MODEL)
 else:
     class _NoopDesc:
         def generate_missing_descriptions(self, _src, table_df, col_df):

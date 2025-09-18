@@ -14,7 +14,7 @@ class ResponseAgent:
 
     def __init__(
         self,
-        model: str = "qwen3:8b",
+        model: str = "hopephoto/Qwen3-4B-Instruct-2507_q8",
         host: str = "http://192.168.0.230:11434",
         max_tokens: int = 1024,
         temperature: float = 0.2,
@@ -48,7 +48,7 @@ class ResponseAgent:
             "stop": ["<think>", "</think>", "<analysis>", "</analysis>", "<Thought>", "</Thought>"],
             "stream": False,
         }
-
+        print(self.model, self.host, self.url_generate)
         resp = requests.post(self.url_generate, json=payload, timeout=self.timeout_sec)
         resp.raise_for_status()
         data = resp.json() if resp.content else {}
@@ -80,5 +80,6 @@ class ResponseAgent:
             user_question=user_question,
             sql_result=sql_result,
         )
+
         print(f"Prompt for Natural Language Response (Local): \n{context_prompt}")
         return self.generate_llm_response(context_prompt)

@@ -13,7 +13,7 @@ from agents.Agent_local import LocalOllamaResponder as ResponderClass
 
 #Local Ollama Responder Model
 Responder = ResponderClass(
-    model="qwen3:8b",  # ← 권장(양자화로 CPU 쾌적)
+    model="hopephoto/Qwen3-4B-Instruct-2507_q8",  # ← 권장(양자화로 CPU 쾌적)
     max_tokens=220,
     temperature=0.2,
     preview_rows=5,
@@ -199,7 +199,7 @@ async def generate_sql(session_id,
         print("Loading Agents.")
         embedder = EmbedderAgent(Embedder_model)
         SQLBuilder = BuildSQLAgent_Local.BuildSQLAgent_Local(
-            model="qwen3:8b",  # ollama pull qwen2.5:3b-instruct-q4_K_M
+            model="hopephoto/Qwen3-4B-Instruct-2507_q8",  # ollama pull qwen2.5:3b-instruct-q4_K_M
             host="http://192.168.0.230:11434",
             max_tokens=1024,
             temperature=0.2,
@@ -207,7 +207,7 @@ async def generate_sql(session_id,
             timeout_sec=300,
         )
         SQLChecker = ValidateSQLAgent(SQLChecker_model)
-        SQLDebugger = DebugSQLAgent_Local.DebugSQLAgent_Local(model="qwen3:8b", host="http://192.168.0.230:11434")
+        SQLDebugger = DebugSQLAgent_Local.DebugSQLAgent_Local(model="hopephoto/Qwen3-4B-Instruct-2507_q8", host="http://192.168.0.230:11434")
 
         re_written_qe=user_question
 
@@ -673,7 +673,7 @@ async def embed_sql(session_id,user_grouping,user_question,generate_sql):
                    The exception message will be included in the returned `embedded` value.
     """ 
     try:
-        Rewriter=ResponseAgent('gemini-1.5-pro')
+        Rewriter=ResponseAgent('hopephoto/Qwen3-4B-Instruct-2507_q8')
 
         if session_id is None or session_id=="":
             print("This is a new session")
