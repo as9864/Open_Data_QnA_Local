@@ -18,7 +18,7 @@ class Agent(ABC):
 
     agentType: str = "Agent"
 
-    def __init__(self, model_id: str, provider: str = "vertexai"):
+    def __init__(self, model_id: str, provider: str = "local"):
         self.model_id = model_id
         if provider == "vertexai":
             self.provider: LLMProvider = VertexAIProvider(model_id)

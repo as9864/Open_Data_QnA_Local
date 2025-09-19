@@ -19,8 +19,6 @@ class DebugSQLAgent_Local:
 
     def __init__(
         self,
-        # model: str = "qwen3:4b-instruct",         # Ollama 모델명 (BuildSQLAgent_Local와 통일)
-        # host: str = "http://localhost:11434",    # Ollama 기본 호스트
         model: str = "hopephoto/Qwen3-4B-Instruct-2507_q8",
         host: str = "http://192.168.0.230:11434",
         max_tokens: int = 1024,
@@ -175,7 +173,15 @@ Rules:
                     STOP = True
             else:
                 AUDIT_TEXT += "\nGenerated query failed on syntax check! Error Message from LLM: " + str(json_syntax_result) + "\nRewriting the query..."
-                syntax_err_df = pd.read_json(json.dumps(json_syntax_result))
+                # syntax_err_df = pd.read_json(json.dumps(json_syntax_result))
+
+                # ✅ 기존 코드(경고 발생):
+                # syntax_err_df = pd.read_json(json.dumps(json_syntax_result))
+
+                # ✅ 교체 코드(경고/에러 모두 해결):
+                syntax_err_df = pd.DataFrame([json_syntax_result])
+
+
                 rewrite_result = self.rewrite_sql_chat(chat_session, sql, user_question, syntax_err_df)
                 AUDIT_TEXT += "\nRewritten SQL:\n" + str(rewrite_result)
                 sql = rewrite_result
@@ -187,3 +193,30 @@ Rules:
                 invalid_response = True
             print(print("debug_SQL 9 : ", AUDIT_TEXT))
         return sql, invalid_response, AUDIT_TEXT
+
+
+    def to_df(obj):
+        # 문자열이면 JSON 파싱
+        if isinstance(obj, str):
+            try:
+                obj = json.loads(obj)
+            except Exception:
+                # 문자열 그대로 보여주기
+                return pd.DataFrame([{"raw": obj}])
+
+        # dict → 한 행
+        if isinstance(obj, dict):
+            # 중첩 구조까지 평탄화하려면 아래 한 줄로 대체:
+            # return pd.json_normalize(obj)
+            return pd.DataFrame([obj])
+
+        # list[dict] → 여러 행
+        if isinstance(obj, list):
+            # list가 스칼라 리스트면 컬럼 하나로 감싸기
+            if obj and not isinstance(obj[0], dict):
+                return pd.DataFrame({"value": obj})
+            return pd.DataFrame(obj)
+
+        # 그 외 타입은 문자열로 표시
+        return pd.DataFrame([{"value": str(obj)}])
+

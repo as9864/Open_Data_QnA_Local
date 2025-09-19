@@ -20,9 +20,7 @@ class BuildSQLAgent_Local:
 
     def __init__(
         self,
-        # model: str = "qwen3:4b-instruct",
-        # host: str = "http://localhost:11434",
-        model: str = "hopephoto/Qwen3-4B-Instruct-2507_q8",
+        model: str = "qwen3:8b",
         host: str = "http://192.168.0.230:11434",
         max_tokens: int = 1024,
         temperature: float = 0.2,

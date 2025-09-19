@@ -3,7 +3,7 @@ import argparse
 import uuid
 import pandas as pd
 
-from agents import EmbedderAgent, BuildSQLAgent_Local, DebugSQLAgent_Local, ValidateSQLAgent, ResponseAgent,VisualizeAgent
+from agents import EmbedderAgent, BuildSQLAgent_Local, DebugSQLAgent_Local, ValidateSQLAgent_Local, ResponseAgent,VisualizeAgent
 from utilities import (PROJECT_ID, PG_REGION, BQ_REGION, EXAMPLES, LOGGING, VECTOR_STORE,
                        BQ_OPENDATAQNA_DATASET_NAME, USE_SESSION_HISTORY)
 from dbconnectors import bqconnector, pgconnector, firestoreconnector
@@ -206,7 +206,8 @@ async def generate_sql(session_id,
             top_p=0.9,
             timeout_sec=300,
         )
-        SQLChecker = ValidateSQLAgent(SQLChecker_model)
+        SQLChecker = ValidateSQLAgent_Local.ValidateSQLAgentLocal(model="hopephoto/Qwen3-4B-Instruct-2507_q8",
+    host="http://192.168.0.230:11434",)
         SQLDebugger = DebugSQLAgent_Local.DebugSQLAgent_Local(model="hopephoto/Qwen3-4B-Instruct-2507_q8", host="http://192.168.0.230:11434")
 
         re_written_qe=user_question
@@ -477,7 +478,7 @@ def get_results_multi(user_sql_map: dict[str, str], EXECUTE_FINAL_SQL: bool = Tr
 
     return combined_df, errors
 
-def get_response(session_id,user_question,result_df,Responder_model='gemini-1.0-pro'):
+def get_response(session_id,user_question,result_df,Responder_model='hopephoto/Qwen3-4B-Instruct-2507_q8'):
     try:
 
 
@@ -519,11 +520,11 @@ async def run_pipeline(session_id,
                 EXECUTE_FINAL_SQL=True,
                 DEBUGGING_ROUNDS = 2, 
                 LLM_VALIDATION=False,
-                Embedder_model='vertex',
-                SQLBuilder_model= 'gemini-1.5-pro',
-                SQLChecker_model= 'gemini-1.0-pro',
-                SQLDebugger_model= 'gemini-1.0-pro',
-                Responder_model= 'gemini-1.0-pro',
+                Embedder_model='local',
+                SQLBuilder_model= 'hopephoto/Qwen3-4B-Instruct-2507_q8',
+                SQLChecker_model= 'hopephoto/Qwen3-4B-Instruct-2507_q8',
+                SQLDebugger_model= 'hopephoto/Qwen3-4B-Instruct-2507_q8',
+                Responder_model= 'hopephoto/Qwen3-4B-Instruct-2507_q8',
                 num_table_matches = 5,
                 num_column_matches = 10,
                 table_similarity_threshold = 0.3,
@@ -543,10 +544,10 @@ async def run_pipeline(session_id,
         DEBUGGING_ROUNDS (int, optional): The number of debugging rounds to perform. Defaults to 2.
         LLM_VALIDATION (bool, optional): Whether to use LLM for validation. Defaults to True.
         Embedder_model (str, optional): The name of the embedding model. Defaults to 'vertex'.
-        SQLBuilder_model (str, optional): The name of the SQL builder model. Defaults to 'gemini-1.5-pro'.
-        SQLChecker_model (str, optional): The name of the SQL checker model. Defaults to 'gemini-1.0-pro'.
-        SQLDebugger_model (str, optional): The name of the SQL debugger model. Defaults to 'gemini-1.0-pro'.
-        Responder_model (str, optional): The name of the responder model. Defaults to 'gemini-1.0-pro'.
+        SQLBuilder_model (str, optional): The name of the SQL builder model. Defaults to 'hopephoto/Qwen3-4B-Instruct-2507_q8'.
+        SQLChecker_model (str, optional): The name of the SQL checker model. Defaults to 'hopephoto/Qwen3-4B-Instruct-2507_q8'.
+        SQLDebugger_model (str, optional): The name of the SQL debugger model. Defaults to 'hopephoto/Qwen3-4B-Instruct-2507_q8'.
+        Responder_model (str, optional): The name of the responder model. Defaults to 'hopephoto/Qwen3-4B-Instruct-2507_q8'.
         num_table_matches (int, optional): The number of table matches to retrieve. Defaults to 5.
         num_column_matches (int, optional): The number of column matches to retrieve. Defaults to 10.
         table_similarity_threshold (float, optional): The similarity threshold for table matching. Defaults to 0.3.
@@ -696,7 +697,7 @@ async def embed_sql(session_id,user_grouping,user_question,generate_sql):
 
 def visualize(session_id,user_question,generated_sql,sql_results):
     try:
-        Rewriter=ResponseAgent('gemini-1.5-pro')
+        Rewriter=ResponseAgent('hopephoto/Qwen3-4B-Instruct-2507_q8')
         
         if session_id is None or session_id=="":
             print("This is a new session")
@@ -740,10 +741,10 @@ if __name__ == '__main__':
     parser.add_argument("--debugging_rounds", type=int, default=2, help="Number of debugging rounds (default: 2)")
     parser.add_argument("--llm_validation", action="store_true", help="Enable LLM validation (default: False)")
     parser.add_argument("--embedder_model", type=str, default='vertex', help="Embedder model name (default: 'vertex')")
-    parser.add_argument("--sqlbuilder_model", type=str, default='gemini-1.5-pro', help="SQL builder model name (default: 'gemini-1.0-pro')")
-    parser.add_argument("--sqlchecker_model", type=str, default='gemini-1.5-pro', help="SQL checker model name (default: 'gemini-1.0-pro')")
-    parser.add_argument("--sqldebugger_model", type=str, default='gemini-1.5-pro', help="SQL debugger model name (default: 'gemini-1.0-pro')")
-    parser.add_argument("--responder_model", type=str, default='gemini-1.5-pro', help="Responder model name (default: 'gemini-1.0-pro')")
+    parser.add_argument("--sqlbuilder_model", type=str, default='hopephoto/Qwen3-4B-Instruct-2507_q8', help="SQL builder model name (default: 'hopephoto/Qwen3-4B-Instruct-2507_q8')")
+    parser.add_argument("--sqlchecker_model", type=str, default='hopephoto/Qwen3-4B-Instruct-2507_q8', help="SQL checker model name (default: 'hopephoto/Qwen3-4B-Instruct-2507_q8')")
+    parser.add_argument("--sqldebugger_model", type=str, default='hopephoto/Qwen3-4B-Instruct-2507_q8', help="SQL debugger model name (default: 'hopephoto/Qwen3-4B-Instruct-2507_q8')")
+    parser.add_argument("--responder_model", type=str, default='hopephoto/Qwen3-4B-Instruct-2507_q8', help="Responder model name (default: 'hopephoto/Qwen3-4B-Instruct-2507_q8')")
     parser.add_argument("--num_table_matches", type=int, default=5, help="Number of table matches (default: 5)")
     parser.add_argument("--num_column_matches", type=int, default=10, help="Number of column matches (default: 10)")
     parser.add_argument("--table_similarity_threshold", type=float, default=0.1, help="Threshold for table similarity (default: 0.1)")
@@ -782,11 +783,11 @@ if __name__ == '__main__':
     #                                                 EXECUTE_FINAL_SQL=True,
     #                                                 DEBUGGING_ROUNDS = 2, 
     #                                                 LLM_VALIDATION=True,
-    #                                                 Embedder_model='vertex',
-    #                                                 SQLBuilder_model= 'gemini-1.0-pro',
-    #                                                 SQLChecker_model= 'gemini-1.0-pro',
-    #                                                 SQLDebugger_model= 'gemini-1.0-pro',
-    #                                                 Responder_model= 'gemini-1.0-pro',
+    #                                                 Embedder_model='local',
+    #                                                 SQLBuilder_model= 'hopephoto/Qwen3-4B-Instruct-2507_q8',
+    #                                                 SQLChecker_model= 'hopephoto/Qwen3-4B-Instruct-2507_q8',
+    #                                                 SQLDebugger_model= 'hopephoto/Qwen3-4B-Instruct-2507_q8',
+    #                                                 Responder_model= 'hopephoto/Qwen3-4B-Instruct-2507_q8',
     #                                                 num_table_matches = 5,
     #                                                 num_column_matches = 10,
     #                                                 table_similarity_threshold = 0.1,
