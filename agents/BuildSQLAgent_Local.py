@@ -6,8 +6,6 @@ import requests
 from typing import List, Optional, Tuple
 
 from utilities import PROMPTS, format_prompt
-from dbconnectors import pgconnector, bqconnector  # 타입별 data type 프롬프트에 사용
-
 # 기존 BuildSQLAgent가 상속하던 Agent의 기능(세션/LLM호출)을
 # 로컬 LLM 호출 코드로 치환합니다. start_chat / generate_llm_response 없이 동작.
 

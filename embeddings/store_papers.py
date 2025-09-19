@@ -29,7 +29,7 @@ except Exception:
     pass
 
 from agents import EmbedderAgent
-from utilities import LOCAL_PG_CONN, PG_CONN_STRING
+from utilities import PG_VECTOR_CONN
 
 
 # ---------------------------------------------------------------------------
@@ -46,9 +46,9 @@ def _normalize_pg_url(url: str) -> str:
     )
 
 
-_PG_CONNSTR = _normalize_pg_url(LOCAL_PG_CONN or PG_CONN_STRING or "")
+_PG_CONNSTR = _normalize_pg_url(PG_VECTOR_CONN or "")
 if not _PG_CONNSTR:
-    raise RuntimeError("LOCAL_PG_CONN or PG_CONN_STRING must be defined in config.ini")
+    raise RuntimeError("PG_VECTOR_CONN (또는 LOCAL_PG_CONN) must be defined in config.ini")
 
 
 def _pg_connect() -> psycopg.Connection:

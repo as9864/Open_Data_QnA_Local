@@ -6,7 +6,13 @@ import pandas as pd
 from agents import EmbedderAgent, BuildSQLAgent_Local, DebugSQLAgent_Local, ValidateSQLAgent_Local, ResponseAgent,VisualizeAgent
 from utilities import (PROJECT_ID, PG_REGION, BQ_REGION, EXAMPLES, LOGGING, VECTOR_STORE,
                        BQ_OPENDATAQNA_DATASET_NAME, USE_SESSION_HISTORY)
-from dbconnectors import bqconnector, pgconnector, firestoreconnector
+from dbconnectors import (
+    bqconnector,
+    data_pgconnector,
+    vector_pgconnector,
+    audit_pgconnector,
+    firestoreconnector,
+)
 from embeddings.store_embeddings import add_sql_embedding
 
 from agents.Agent_local import LocalOllamaResponder as ResponderClass
@@ -29,12 +35,12 @@ if VECTOR_STORE=='bigquery-vector':
 
 elif VECTOR_STORE == 'cloudsql-pgvector':
     region=PG_REGION
-    vector_connector = pgconnector
+    vector_connector = vector_pgconnector
     call_await=True
 
 elif VECTOR_STORE == 'local-pgvector':
     region=PG_REGION
-    vector_connector = pgconnector
+    vector_connector = vector_pgconnector
     call_await=True
 
 else: 
@@ -338,7 +344,18 @@ async def generate_sql(session_id,
         # print(f'\n\n AUDIT_TEXT: \n {AUDIT_TEXT}')
 
         if LOGGING: 
-            pgconnector.make_audit_entry(DATA_SOURCE, user_grouping, SQLBuilder_model, user_question, final_sql, found_in_vector, "", process_step, error_msg,AUDIT_TEXT)
+            audit_pgconnector.make_audit_entry(
+                DATA_SOURCE,
+                user_grouping,
+                SQLBuilder_model,
+                user_question,
+                final_sql,
+                found_in_vector,
+                "",
+                process_step,
+                error_msg,
+                AUDIT_TEXT,
+            )
 
 
     except Exception as e:
@@ -348,7 +365,18 @@ async def generate_sql(session_id,
         AUDIT_TEXT=AUDIT_TEXT+ "\nException at SQL generation"
         print("Error :: "+str(error_msg))
         if LOGGING:
-            pgconnector.make_audit_entry(DATA_SOURCE, user_grouping, SQLBuilder_model, user_question, final_sql, found_in_vector, "", process_step, error_msg,AUDIT_TEXT)
+            audit_pgconnector.make_audit_entry(
+                DATA_SOURCE,
+                user_grouping,
+                SQLBuilder_model,
+                user_question,
+                final_sql,
+                found_in_vector,
+                "",
+                process_step,
+                error_msg,
+                AUDIT_TEXT,
+            )
 
     if USE_SESSION_HISTORY and not invalid_response:
         firestoreconnector.log_chat(session_id,user_question,final_sql,user_id)
@@ -392,7 +420,7 @@ def get_results(user_grouping, final_sql, invalid_response=False, EXECUTE_FINAL_
             if DATA_SOURCE=='bigquery':
                 src_connector = bqconnector
             else: 
-                src_connector = pgconnector
+                src_connector = data_pgconnector
         else:
             raise ValueError(DATA_SOURCE)
 

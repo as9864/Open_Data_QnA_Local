@@ -3,7 +3,7 @@ import sys
 import pandas as pd
 from typing import Optional, List, Dict, Any
 
-from dbconnectors import pgconnector, bqconnector
+from dbconnectors import data_pgconnector, bqconnector
 from agents import EmbedderAgent, DescriptionAgent
 from utilities import (
     EMBEDDING_MODEL,
@@ -50,12 +50,12 @@ else:
 # Postgres 스키마 조회
 # ─────────────────────────────────────────────
 def _pg_table_schema_df(schema: str, table_names=None) -> pd.DataFrame:
-    if hasattr(pgconnector, "return_table_schema_sql") and hasattr(pgconnector, "retrieve_df"):
-        sql = pgconnector.return_table_schema_sql(schema, table_names=table_names)
-        return pgconnector.retrieve_df(sql)
+    if hasattr(data_pgconnector, "return_table_schema_sql") and hasattr(data_pgconnector, "retrieve_df"):
+        sql = data_pgconnector.return_table_schema_sql(schema, table_names=table_names)
+        return data_pgconnector.retrieve_df(sql)
     import psycopg
-    from utilities import LOCAL_PG_CONN, PG_CONN_STRING
-    connstr = (LOCAL_PG_CONN or PG_CONN_STRING)
+    from utilities import PG_QUERY_CONN, PG_CONN_STRING
+    connstr = (PG_QUERY_CONN or PG_CONN_STRING)
 
     names_filter = ""
     params = [schema]
@@ -82,12 +82,12 @@ def _pg_table_schema_df(schema: str, table_names=None) -> pd.DataFrame:
         return pd.read_sql_query(sql, conn, params=params)
 
 def _pg_column_schema_df(schema: str, table_names=None) -> pd.DataFrame:
-    if hasattr(pgconnector, "return_column_schema_sql") and hasattr(pgconnector, "retrieve_df"):
-        sql = pgconnector.return_column_schema_sql(schema, table_names=table_names)
-        return pgconnector.retrieve_df(sql)
+    if hasattr(data_pgconnector, "return_column_schema_sql") and hasattr(data_pgconnector, "retrieve_df"):
+        sql = data_pgconnector.return_column_schema_sql(schema, table_names=table_names)
+        return data_pgconnector.retrieve_df(sql)
     import psycopg
-    from utilities import LOCAL_PG_CONN, PG_CONN_STRING
-    connstr = (LOCAL_PG_CONN or PG_CONN_STRING)
+    from utilities import PG_QUERY_CONN, PG_CONN_STRING
+    connstr = (PG_QUERY_CONN or PG_CONN_STRING)
 
     names_filter = ""
     params = [schema]
@@ -194,8 +194,8 @@ def retrieve_embeddings(SOURCE: str, SCHEMA: str = "public", table_names=None):
             )
 
             column_name_df["sample_values"] = None
-            if USE_COLUMN_SAMPLES and hasattr(pgconnector, "get_column_samples"):
-                column_name_df = pgconnector.get_column_samples(column_name_df)
+            if USE_COLUMN_SAMPLES and hasattr(data_pgconnector, "get_column_samples"):
+                column_name_df = data_pgconnector.get_column_samples(column_name_df)
 
             # 테이블 임베딩
             table_details_chunked = []
