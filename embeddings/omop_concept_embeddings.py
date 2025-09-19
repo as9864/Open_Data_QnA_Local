@@ -15,12 +15,11 @@ except Exception:  # pragma: no cover - numpy is optional
     np = None  # type: ignore
 
 from agents import EmbedderAgent
-from dbconnectors import pgconnector
+from dbconnectors import data_pgconnector
 from utilities import (
     EMBEDDING_MODEL,
     EMBEDDING_MODEL_PATH,
-    LOCAL_PG_CONN,
-    PG_CONN_STRING,
+    PG_VECTOR_CONN,
     config,
 )
 
@@ -40,9 +39,9 @@ def _normalize_pg_url(url: str) -> str:
     )
 
 
-_PG_CONNSTR = _normalize_pg_url(LOCAL_PG_CONN or PG_CONN_STRING or "")
+_PG_CONNSTR = _normalize_pg_url(PG_VECTOR_CONN or "")
 if not _PG_CONNSTR:
-    raise RuntimeError("LOCAL_PG_CONN or PG_CONN_STRING must be defined in config.ini")
+    raise RuntimeError("PG_VECTOR_CONN (또는 LOCAL_PG_CONN) must be defined in config.ini")
 
 
 def _pg_connect() -> psycopg.Connection:
@@ -153,7 +152,7 @@ def _fetch_concepts(limit: int | None = None):
     query = _CONCEPT_QUERY
     if limit:
         query = f"{query}\nLIMIT {int(limit)}"
-    return pgconnector.retrieve_df(query)
+    return data_pgconnector.retrieve_df(query)
 
 
 def _build_description(record: Dict[str, Any]) -> str:

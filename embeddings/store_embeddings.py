@@ -9,7 +9,7 @@ from pgvector.psycopg import register_vector
 from agents import EmbedderAgent
 
 # 우리 유틸에서 가져옴 (이미 만들어둔 값 사용)
-from utilities import LOCAL_PG_CONN, PG_CONN_STRING , EMBEDDING_MODEL, VECTOR_STORE , PG_LOCAL, LOCAL_USER_GROUPING
+from utilities import PG_VECTOR_CONN, EMBEDDING_MODEL, VECTOR_STORE, PG_LOCAL, LOCAL_USER_GROUPING
 
 # ─────────────────────────────────────────────────────────────
 # 연결 문자열 정규화 (sqlalchemy 스타일 → libpq)
@@ -20,9 +20,9 @@ def _normalize_pg_url(url: str) -> str:
         .replace("postgres+psycopg2://", "postgresql://")\
         .replace("postgres://", "postgresql://")
 
-_PG_CONNSTR = _normalize_pg_url(LOCAL_PG_CONN or PG_CONN_STRING or "")
+_PG_CONNSTR = _normalize_pg_url(PG_VECTOR_CONN or "")
 if not _PG_CONNSTR:
-    raise RuntimeError("LOCAL_PG_CONN/PG_CONN_STRING 둘 중 하나는 config.ini에 설정되어 있어야 합니다.")
+    raise RuntimeError("PG_VECTOR_CONN (또는 LOCAL_PG_CONN) 값이 config.ini에 설정되어 있어야 합니다.")
 
 def _pg_connect() -> psycopg.Connection:
     # libpq URL로 접속 (필요시 kwargs 파싱 로직을 추가해도 됨)

@@ -1,7 +1,6 @@
 from abc import ABC
 from datetime import datetime
 
-from dbconnectors import pgconnector, bqconnector, firestoreconnector
 from utilities import PROMPTS, format_prompt
 
 from .core import Agent

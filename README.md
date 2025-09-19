@@ -219,6 +219,16 @@ The path should point to the directory containing the model weights.
 - You can group multiple tables from different datasets or schema into a grouping and provide the details
 - If your dataset/schema has many tables and you want to run the solution against few you should specifically choose a group for that tables only
 
+##### PostgreSQL connection profiles
+
+- `pg_conn_string` continues to act as the default connection string for all Postgres access.
+- Optional overrides let you split traffic per use case:
+  - `PG_QUERY_CONN` – SQL generation, schema discovery and runtime query execution.
+  - `PG_VECTOR_CONN` – embedding ingestion scripts (`embeddings/store_embeddings.py`, `store_papers.py`, OMOP tooling) and vector search services.
+  - `PG_AUDIT_CONN` – dedicated connection for audit logging; the connector automatically provisions the `audit_log` table when required.
+- When any of the optional keys are omitted they fall back to `pg_conn_string`, keeping single-database deployments unchanged.
+- For Cloud SQL deployments the `[PGCLOUDSQL]` section also accepts the same keys. Provide either a connection string or semicolon-separated overrides (for example `pg_vector_conn = database=vector_db;user=vector_writer`).
+
 **Format for data_source_list.csv**
 
 **source | user_grouping | schema | table**

@@ -7,7 +7,7 @@ from typing import Optional, Tuple, List
 import pandas as pd
 
 from utilities import PROMPTS, format_prompt
-from dbconnectors import pgconnector, bqconnector  # test_sql_plan_execution 재사용
+from dbconnectors import data_pgconnector, bqconnector  # test_sql_plan_execution 재사용
 
 class DebugSQLAgent_Local:
     """
@@ -160,7 +160,7 @@ Rules:
             print("debug_SQL 6 : ", json_syntax_result)
             if json_syntax_result.get("valid", True):
                 AUDIT_TEXT += "\nGenerated SQL is syntactically correct as per LLM Validation!"
-                connector = bqconnector if source_type == "bigquery" else pgconnector
+                connector = bqconnector if source_type == "bigquery" else data_pgconnector
                 print("debug_SQL 7 : ", connector)
                 correct_sql, exec_result_df = connector.test_sql_plan_execution(sql)
                 print("debug_SQL 8 : ", correct_sql)

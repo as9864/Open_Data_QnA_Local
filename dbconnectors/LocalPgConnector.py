@@ -35,10 +35,23 @@ class LocalPgConnector(DBConnector, ABC):
         ``postgresql+psycopg2://user:pass@localhost/db``).
     """
 
-    def __init__(self, conn_str: str):
+    def __init__(self, conn_str: str, *, ensure_audit_table: bool = False):
+        """Create a connector for *conn_str*.
+
+        Parameters
+        ----------
+        conn_str:
+            SQLAlchemy-compatible connection string for the Postgres database.
+        ensure_audit_table:
+            When ``True`` the ``audit_log`` table is created on initialisation
+            if it does not already exist. Defaults to ``False`` so that data
+            and vector connectors avoid unnecessary checks.
+        """
+
         self.conn_str = conn_str
         self.engine = create_engine(conn_str)
-        self._ensure_audit_table()
+        if ensure_audit_table:
+            self._ensure_audit_table()
 
     def getconn(self):
         """Return a new connection object."""

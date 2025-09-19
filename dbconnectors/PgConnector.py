@@ -4,11 +4,12 @@ PostgreSQL Connector Class
 import asyncpg
 from google.cloud.sql.connector import Connector
 from sqlalchemy import create_engine
-import pandas as pd 
+import pandas as pd
 from sqlalchemy.sql import text
 from pgvector.asyncpg import register_vector
 import asyncio
-from pg8000.exceptions import DatabaseError 
+from pg8000.exceptions import DatabaseError
+from datetime import datetime
 
 from utilities import root_dir
 from google.cloud.sql.connector import Connector
@@ -113,12 +114,14 @@ class PgConnector(DBConnector, ABC):
 
 
     def __init__(self,
-                project_id:str, 
-                region:str, 
+                project_id:str,
+                region:str,
                 instance_name:str,
-                database_name:str, 
-                database_user:str, 
-                database_password:str): 
+                database_name:str,
+                database_user:str,
+                database_password:str,
+                *,
+                ensure_audit_table: bool = False):
 
         self.project_id = project_id
         self.region = region 
@@ -131,6 +134,9 @@ class PgConnector(DBConnector, ABC):
             "postgresql+pg8000://",
             creator=self.getconn,
         )
+
+        if ensure_audit_table:
+            self._ensure_audit_table()
 
 
     def getconn(self): 
@@ -401,6 +407,60 @@ class PgConnector(DBConnector, ABC):
     
 
 
+
+
+    def _ensure_audit_table(self) -> None:
+        with self.pool.connect() as conn:
+            conn.execute(text(
+                """
+                CREATE TABLE IF NOT EXISTS audit_log (
+                    id SERIAL PRIMARY KEY,
+                    source_type TEXT,
+                    user_grouping TEXT,
+                    model_used TEXT,
+                    question TEXT,
+                    generated_sql TEXT,
+                    execution_time TIMESTAMPTZ,
+                    full_log TEXT
+                );
+                """
+            ))
+            conn.commit()
+
+    def make_audit_entry(
+        self,
+        source_type: str,
+        user_grouping: str,
+        model: str,
+        question: str,
+        generated_sql: str,
+        found_in_vector: bool,
+        need_rewrite: bool,
+        failure_step: str,
+        error_msg: str,
+        full_log_text: str,
+    ) -> str:
+        with self.pool.connect() as conn:
+            stmt = text(
+                """
+                    INSERT INTO audit_log
+                        (source_type, user_grouping, model_used, question, generated_sql, execution_time, full_log)
+                    VALUES
+                        (:source_type, :user_grouping, :model, :question, :generated_sql, :execution_time, :full_log)
+                """
+            )
+            params = {
+                "source_type": source_type,
+                "user_grouping": user_grouping,
+                "model": model,
+                "question": question,
+                "generated_sql": generated_sql,
+                "execution_time": datetime.utcnow(),
+                "full_log": full_log_text,
+            }
+            conn.execute(stmt, params)
+            conn.commit()
+        return "OK"
 
 
     def return_column_schema_sql(self, schema, table_names=None): 

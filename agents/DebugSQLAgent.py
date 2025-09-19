@@ -4,7 +4,7 @@ import vertexai
 from vertexai.language_models import CodeChatModel
 from vertexai.generative_models import GenerativeModel,GenerationConfig
 from google.cloud.aiplatform import telemetry
-from dbconnectors import pgconnector, bqconnector
+from dbconnectors import data_pgconnector, bqconnector
 from utilities import PROMPTS, format_prompt
 from .core import Agent
 import pandas as pd
@@ -189,7 +189,7 @@ class DebugSQLAgent(Agent, ABC):
                 if source_type=='bigquery':
                     connector=bqconnector
                 else:
-                    connector=pgconnector
+                    connector=data_pgconnector
                     
                 correct_sql, exec_result_df = connector.test_sql_plan_execution(sql)
                 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import psycopg
 from pgvector.psycopg import register_vector
-from utilities import LOCAL_PG_CONN, PG_CONN_STRING
+from utilities import PG_VECTOR_CONN
 
 
 # Normalize various Postgres URI schemes to libpq format
@@ -19,9 +19,9 @@ def _normalize_pg_url(url: str) -> str:
     )
 
 
-_CONNSTR = _normalize_pg_url(LOCAL_PG_CONN or PG_CONN_STRING or "")
+_CONNSTR = _normalize_pg_url(PG_VECTOR_CONN or "")
 if not _CONNSTR:
-    raise RuntimeError("LOCAL_PG_CONN/PG_CONN_STRING must be set in config.ini")
+    raise RuntimeError("PG_VECTOR_CONN (또는 LOCAL_PG_CONN) must be set in config.ini")
 
 DDL_TABLE = """
 CREATE TABLE IF NOT EXISTS papers_embeddings (

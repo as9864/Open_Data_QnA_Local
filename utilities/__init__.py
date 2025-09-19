@@ -94,6 +94,17 @@ LOCAL_PG_CONN = (
     config.get("LOCAL", "PG_CONN", fallback="")
     or config.get("LOCAL", "PG_CONN_STRING", fallback="")
 )
+_LOCAL_QUERY_CONN = config.get("LOCAL", "PG_QUERY_CONN", fallback="").strip()
+_LOCAL_VECTOR_CONN = config.get("LOCAL", "PG_VECTOR_CONN", fallback="").strip()
+_LOCAL_AUDIT_CONN = config.get("LOCAL", "PG_AUDIT_CONN", fallback="").strip()
+
+PG_QUERY_CONN = _LOCAL_QUERY_CONN or LOCAL_PG_CONN
+PG_VECTOR_CONN = _LOCAL_VECTOR_CONN or LOCAL_PG_CONN
+PG_AUDIT_CONN = _LOCAL_AUDIT_CONN or LOCAL_PG_CONN
+
+PG_CLOUD_QUERY_CONN = config.get("PGCLOUDSQL", "PG_QUERY_CONN", fallback="").strip()
+PG_CLOUD_VECTOR_CONN = config.get("PGCLOUDSQL", "PG_VECTOR_CONN", fallback="").strip()
+PG_CLOUD_AUDIT_CONN = config.get("PGCLOUDSQL", "PG_AUDIT_CONN", fallback="").strip()
 LOCAL_SQLITE_DB = config.get("LOCAL", "SQLITE_DB", fallback="opendataqna.db")
 PG_CONN_STRING = config.get("LOCAL","PG_CONN_STRING", fallback="")
 
@@ -127,6 +138,12 @@ __all__ = [
     # 호환 심볼
     "CONNECTOR_BACKEND",
     "LOCAL_PG_CONN",
+    "PG_QUERY_CONN",
+    "PG_VECTOR_CONN",
+    "PG_AUDIT_CONN",
+    "PG_CLOUD_QUERY_CONN",
+    "PG_CLOUD_VECTOR_CONN",
+    "PG_CLOUD_AUDIT_CONN",
     "LOCAL_SQLITE_DB",
     "PG_CONN_STRING",
 ]

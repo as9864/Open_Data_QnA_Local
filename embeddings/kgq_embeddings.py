@@ -6,7 +6,6 @@ import numpy as np
 from pgvector.asyncpg import register_vector
 from google.cloud.sql.connector import Connector
 from google.cloud import bigquery
-from dbconnectors import pgconnector
 from agents import EmbedderAgent
 from sqlalchemy.sql import text
 from utilities import (
