@@ -328,6 +328,6 @@ if __name__ == "__main__":
     saved = store_embeddings(tdf, cdf, replace_schema="public")
     print("stored:", saved)
 
-    tdf, cdf = retrieve_embeddings("cloudsql-pg", SCHEMA="fhir_to_cdm")
-    saved = store_embeddings(tdf, cdf, replace_schema="fhir_to_cdm")
+    tdf, cdf = retrieve_embeddings("cloudsql-pg", SCHEMA="cdm")
+    saved = store_embeddings(tdf, cdf, replace_schema="cdm")
 

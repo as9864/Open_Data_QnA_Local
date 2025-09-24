@@ -20,7 +20,7 @@ usecase_bigquery_MovieExplorer-bigquery: |
 usecase_cloudsql-pg_WorldCensus-cloudsql-pg: |
   The World Census Dataset is group of tables 
 
-usecase_posgres-fhir_to_cdm: |
+usecase_postgres-cdm: |
   The World Census Dataset is group of tables 
 
 #################################################################################################

@@ -109,7 +109,7 @@ LOCAL_SQLITE_DB = config.get("LOCAL", "SQLITE_DB", fallback="opendataqna.db")
 PG_CONN_STRING = config.get("LOCAL","PG_CONN_STRING", fallback="")
 
 PG_LOCAL = config.get("LOCAL", "pglocal", fallback="postgres")
-LOCAL_USER_GROUPING =  config.get("LOCAL", "user_grouping", fallback="fhir_to_cdm")
+LOCAL_USER_GROUPING =  config.get("LOCAL", "user_grouping", fallback="cdm")
 
 
 __all__ = [

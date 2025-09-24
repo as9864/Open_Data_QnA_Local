@@ -92,11 +92,11 @@ def get_known_databases():
         logger.info("json_groupings2: %s", js)
         groupings = [item["table_schema"] for item in js if isinstance(item, dict) and "table_schema" in item]
         if not groupings:
-            logger.warning("No groupings found, fallback to ['fhir_to_cdm']")
-            groupings = ["fhir_to_cdm"]
+            logger.warning("No groupings found, fallback to ['cdm']")
+            groupings = ["cdm"]
     except Exception as e:
         logger.exception("Failed to retrieve/parse database groupings. Using fallback.")
-        groupings = ["fhir_to_cdm"]
+        groupings = ["cdm"]
     logger.info("user_groupings - %s", groupings)
     return groupings
 

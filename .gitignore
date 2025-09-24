@@ -14,3 +14,4 @@ firebase.json
 .firebaserc
 config_copy.ini
 eval/
+config.ini

@@ -46,6 +46,13 @@ from services.omop_concept_chat import run as concept_chat_run
 
 from agents.Agent_local import LocalOllamaResponder as ResponderClass
 
+
+import os
+import json
+import logging as log
+import requests
+
+
 #Local Ollama Responder Model
 Responder = ResponderClass(
     model="hopephoto/Qwen3-4B-Instruct-2507_q8",  # ← 권장(양자화로 CPU 쾌적)
@@ -77,6 +84,26 @@ log.basicConfig(level=log.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 SESSION_TIMEOUT_SECONDS = 1800
 _session_store: dict[str, datetime.datetime] = {}
+
+# ★ NEW: 콜백 베이스 URL (환경변수로도 재정의 가능)
+CALLBACK_BASE_URL = os.environ.get("CALLBACK_BASE_URL", "http://localhost:3010")
+
+def _callback_url(chat_id: str) -> str:
+    chat_id_enc = urllib.parse.quote(str(chat_id or ""), safe="")
+    return f"{CALLBACK_BASE_URL}/api/chat/callback/{chat_id_enc}"
+
+def _post_callback(chat_id: str, answer: str, status: str = "DONE") -> None:
+    url = _callback_url(chat_id)
+    payload = {"answer": answer or "", "chat_status": status}
+    try:
+        resp = requests.post(url, json=payload, timeout=10)
+        log.info("Callback POST %s %s %s", url, resp.status_code, resp.text[:2000])
+    except Exception as e:
+        log.exception("Callback POST failed: %s", e)
+
+
+
+
 
 
 def validate_session(session_id: str) -> tuple[str, bool]:
@@ -129,6 +156,124 @@ num_sql_matches = 3
 
 app = Flask(__name__) 
 cors = CORS(app, resources={r"/*": {"origins": "*"}})
+
+
+
+# ------------------------------------------------------------
+# ★ NEW: 통합 엔드포인트 - 사진 구조에 맞춘 입력/콜백
+# Backend → SLLM Python Server
+#   Body: { "questionType": int, "question": str, "chatId": str, ... }
+#   1: text2sql, 2: concept_chat, 3: papers/search
+# SLLM Python Server → Backend
+#   POST {CALLBACK_BASE_URL}/api/chat/callback/{chatId}
+#   Body: { "answer": str, "chat_status": "DONE" | "FAIL" }
+# ------------------------------------------------------------
+@app.route("/api/chat", methods=["POST"])
+async def api_chat_unified():
+    try:
+        body = request.get_json(silent=True) or {}
+        # 오타 대비(qeustionType)도 함께 허용
+        qtype = body.get("questionType", body.get("qeustionType"))
+        question = body.get("question")
+        chat_id = body.get("chatId")
+
+        # 선택 파라미터(있으면 사용)
+        user_grouping = body.get("user_grouping", 'cdm')  # text2sql에서 스키마/DB 구분 등에 사용 #cdm 고정
+        top_k = body.get("top_k", 5) # top_k 5개 고정
+        summarize = bool(body.get("summarize", True))
+
+        # 기본 검증
+        if qtype is None or question is None or chat_id is None:
+            return jsonify({"Error": "questionType, question, chatId are required"}), 400
+
+        try:
+            qtype = int(qtype)
+        except Exception:
+            return jsonify({"Error": "questionType must be int"}), 400
+
+        answer_text = ""
+        status = "DONE"
+
+        if qtype == 1:
+            # ----- /query/text2sql 로직 호출 -----
+            session_id, new_session = validate_session(body.get("session_id"))
+            final_sql, results_df, response = await chat_generate_sql_results(
+                session_id,
+                user_grouping,
+                question,
+            )
+            # answer: 자연어 응답 우선, 없으면 SQL/row수 보조
+            if response:
+                answer_text = str(response)
+            else:
+                rows = (len(results_df) if hasattr(results_df, "__len__") else 0)
+                answer_text = f"SQL 생성 완료. rows={rows}\n{final_sql}"
+
+        elif qtype == 2:
+            # ----- /omop/concept_chat 로직 호출 -----
+            payload = await concept_chat_run(question, top_k=int(top_k))
+            # payload에서 문자열 응답 필드 우선 추출
+            if isinstance(payload, dict):
+                answer_text = payload.get("answer") or payload.get("message") \
+                              or payload.get("text") or json.dumps(payload, ensure_ascii=False)
+            else:
+                answer_text = str(payload)
+
+        elif qtype == 3:
+            # ----- /papers/search 로직 호출 (요약 있으면 사용) -----
+            embedder = EmbedderAgent("local", "BAAI/bge-m3")
+            query_emb = embedder.create(question)
+
+            with _pg_connect() as conn:
+                register_vector(conn)
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT id, title, abstract, metadata
+                        FROM papers_embeddings
+                        ORDER BY embedding <=> %s::vector
+                        LIMIT %s;
+                        """,
+                        (query_emb, int(top_k)),
+                    )
+                    rows = cur.fetchall()
+
+            results = [
+                {"id": r[0], "title": r[1], "abstract": r[2], "metadata": r[3]}
+                for r in rows
+            ]
+
+            # 요약이 켜져 있으면 요약 생성(가능하면)
+            if summarize and results:
+                try:
+                    answer_text = Responder.run_paper(question, json.dumps(results, ensure_ascii=False))
+                except Exception:
+                    # 요약 실패 시 타이틀 나열
+                    titles = [x.get("title") for x in results if x.get("title")]
+                    answer_text = "검색 결과:\n- " + "\n- ".join(titles)
+            else:
+                titles = [x.get("title") for x in results if x.get("title")]
+                answer_text = "검색 결과:\n- " + "\n- ".join(titles)
+
+        else:
+            return jsonify({"Error": f"Unsupported questionType: {qtype}"}), 400
+
+        # ---- 콜백 전송 ----
+        _post_callback(chat_id, answer_text, status="DONE")
+
+        # 클라이언트에는 간단 응답
+        return jsonify({"chatId": chat_id, "chat_status": "DONE"}), 202
+
+    except Exception as e:
+        log.exception("api_chat_unified failed")
+        # 실패 콜백 전송(가능하면 chatId 포함)
+        try:
+            chat_id = (request.get_json(silent=True) or {}).get("chatId")
+            if chat_id:
+                _post_callback(chat_id, f"에러: {e}", status="FAIL")
+        except Exception:
+            pass
+        return jsonify({"Error": str(e)}), 500
 
 
 
