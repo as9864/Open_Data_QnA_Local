@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from functools import lru_cache
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 try:  # psycopg is optional during unit tests
     import psycopg
@@ -98,6 +98,30 @@ def _to_float_list(vector: Sequence[float] | Sequence[Any]) -> List[float]:
     return [float(x) for x in vector]
 
 
+def _format_history_context(
+    history: Optional[Sequence[Dict[str, Any]]],
+    max_turns: int = 3,
+) -> str:
+    if not history:
+        return ""
+
+    turns = list(history)[-max_turns:]
+    formatted: List[str] = []
+    for turn in turns:
+        question = (turn.get("question") or turn.get("user_question") or "").strip()
+        answer = (turn.get("answer") or turn.get("bot_response") or "").strip()
+        if not question and not answer:
+            continue
+        block_lines: List[str] = []
+        if question:
+            block_lines.append(f"Q: {question}")
+        if answer:
+            block_lines.append(f"A: {answer}")
+        if block_lines:
+            formatted.append("\n".join(block_lines))
+    return "\n\n".join(formatted)
+
+
 def _query_similar_concepts(query_embedding: Sequence[float], limit: int = 5) -> List[Dict[str, Any]]:
     if psycopg is None or register_vector is None or dict_row is None:
         return []
@@ -167,7 +191,12 @@ def _extract_embedding(raw_embedding: Any) -> List[float]:
     raise TypeError("EmbedderAgent.create returned an unexpected embedding format")
 
 
-async def run(question: str, *, top_k: int = 5) -> Dict[str, Any]:
+async def run(
+    question: str,
+    *,
+    top_k: int = 5,
+    history: Optional[Sequence[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
     """Generate an OMOP concept chat response enriched with retrieved concepts."""
 
     embedder = _get_embedder()
@@ -178,7 +207,11 @@ async def run(question: str, *, top_k: int = 5) -> Dict[str, Any]:
     prompt_template = PROMPTS["omop_concept_chat"]
     base_prompt = format_prompt(prompt_template, question=question)
     context_block = _format_concept_context(concepts)
-    final_prompt = f"{base_prompt}\n\n[Retrieved OMOP Concepts]\n{context_block}"
+    history_block = _format_history_context(history)
+    final_prompt = base_prompt
+    if history_block:
+        final_prompt = f"{final_prompt}\n\n[Conversation History]\n{history_block}"
+    final_prompt = f"{final_prompt}\n\n[Retrieved OMOP Concepts]\n{context_block}"
 
     agent = _get_agent()
     answer = await asyncio.to_thread(agent.generate_llm_response, final_prompt)

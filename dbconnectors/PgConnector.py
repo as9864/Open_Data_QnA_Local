@@ -10,6 +10,7 @@ from pgvector.asyncpg import register_vector
 import asyncio
 from pg8000.exceptions import DatabaseError
 from datetime import datetime
+from typing import Optional
 
 from utilities import root_dir
 from google.cloud.sql.connector import Connector
@@ -425,6 +426,25 @@ class PgConnector(DBConnector, ABC):
                 );
                 """
             ))
+            conn.execute(text(
+                """
+                CREATE TABLE IF NOT EXISTS chat_history_log (
+                    id SERIAL PRIMARY KEY,
+                    chat_id TEXT NOT NULL,
+                    session_id TEXT,
+                    question_type INTEGER,
+                    question TEXT,
+                    answer TEXT,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+                """
+            ))
+            conn.execute(text(
+                """
+                CREATE INDEX IF NOT EXISTS idx_chat_history_log_chat_created
+                    ON chat_history_log (chat_id, created_at);
+                """
+            ))
             conn.commit()
 
     def make_audit_entry(
@@ -461,6 +481,74 @@ class PgConnector(DBConnector, ABC):
             conn.execute(stmt, params)
             conn.commit()
         return "OK"
+
+    def make_chat_history_entry(
+        self,
+        chat_id: str,
+        session_id: Optional[str],
+        question_type: Optional[int],
+        question: str,
+        answer: str,
+        *,
+        created_at: datetime | None = None,
+    ) -> None:
+        if created_at is None:
+            created_at = datetime.utcnow()
+
+        with self.pool.connect() as conn:
+            stmt = text(
+                """
+                INSERT INTO chat_history_log
+                    (chat_id, session_id, question_type, question, answer, created_at)
+                VALUES
+                    (:chat_id, :session_id, :question_type, :question, :answer, :created_at)
+                """
+            )
+            params = {
+                "chat_id": chat_id,
+                "session_id": session_id,
+                "question_type": question_type,
+                "question": question,
+                "answer": answer,
+                "created_at": created_at,
+            }
+            conn.execute(stmt, params)
+            conn.commit()
+
+    def get_chat_history(self, chat_id: str, limit: int) -> list[dict[str, object]]:
+        with self.pool.connect() as conn:
+            stmt = text(
+                """
+                SELECT chat_id, session_id, question_type, question, answer, created_at
+                FROM chat_history_log
+                WHERE chat_id = :chat_id
+                ORDER BY created_at ASC
+                LIMIT :limit
+                """
+            )
+            result = conn.execute(stmt, {"chat_id": chat_id, "limit": limit})
+            rows = result.mappings().all()
+
+        history: list[dict[str, object]] = []
+        for row in rows:
+            created_at = row.get("created_at")
+            if isinstance(created_at, datetime):
+                created_at_str = created_at.isoformat()
+            else:
+                created_at_str = str(created_at)
+
+            history.append(
+                {
+                    "chatId": row.get("chat_id"),
+                    "sessionId": row.get("session_id"),
+                    "questionType": row.get("question_type"),
+                    "question": row.get("question"),
+                    "answer": row.get("answer"),
+                    "timestamp": created_at_str,
+                }
+            )
+
+        return history
 
 
     def return_column_schema_sql(self, schema, table_names=None): 
