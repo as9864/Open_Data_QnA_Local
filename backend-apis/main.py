@@ -34,9 +34,12 @@ import firebase_admin
 from firebase_admin import credentials, auth
 from functools import wraps
 
+from typing import Any, Dict, List, Optional
+
 from embeddings.store_papers import _prepare_records, store_papers, _pg_connect
 from agents import EmbedderAgent
 from pgvector.psycopg import register_vector
+from dbconnectors import audit_pgconnector
 
 firebase_admin.initialize_app()
 
@@ -84,6 +87,120 @@ log.basicConfig(level=log.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 SESSION_TIMEOUT_SECONDS = 1800
 _session_store: dict[str, datetime.datetime] = {}
+
+CHAT_HISTORY_LIMIT = int(os.environ.get("CHAT_HISTORY_LIMIT", "20"))
+_chat_histories: dict[str, List[Dict[str, Any]]] = {}
+_chat_sessions: dict[str, str] = {}
+
+
+def _get_chat_history(chat_id: str) -> List[Dict[str, Any]]:
+    history = _chat_histories.get(chat_id)
+    if history is None:
+        history = _load_persisted_history(chat_id)
+        _chat_histories[chat_id] = history
+    return history
+
+
+def _load_persisted_history(chat_id: str) -> List[Dict[str, Any]]:
+    if not chat_id:
+        return []
+
+    try:
+        records = audit_pgconnector.get_chat_history(chat_id, CHAT_HISTORY_LIMIT)
+    except Exception:
+        log.exception("Failed to load chat history for chat_id=%s", chat_id)
+        return []
+
+    history: List[Dict[str, Any]] = []
+    for record in records:
+        timestamp = record.get("timestamp")
+        timestamp_str = str(timestamp) if timestamp is not None else ""
+
+        history.append(
+            {
+                "questionType": record.get("questionType"),
+                "question": (record.get("question") or "").strip(),
+                "answer": (record.get("answer") or "").strip(),
+                "timestamp": timestamp_str,
+                "sessionId": record.get("sessionId"),
+            }
+        )
+
+    return history
+
+
+def _remember_exchange(
+    chat_id: str,
+    question_type: int,
+    question: Optional[str],
+    answer: Optional[str],
+    session_id: Optional[str],
+) -> None:
+    if not chat_id:
+        return
+
+    recorded_at = datetime.datetime.utcnow()
+    entry = {
+        "questionType": question_type,
+        "question": (question or "").strip(),
+        "answer": (answer or "").strip(),
+        "timestamp": recorded_at.isoformat() + "Z",
+        "sessionId": session_id,
+    }
+
+    history = _get_chat_history(chat_id)
+    history.append(entry)
+    if len(history) > CHAT_HISTORY_LIMIT:
+        del history[:-CHAT_HISTORY_LIMIT]
+
+    try:
+        audit_pgconnector.make_chat_history_entry(
+            chat_id=chat_id,
+            session_id=session_id,
+            question_type=question_type,
+            question=entry["question"],
+            answer=entry["answer"],
+            created_at=recorded_at,
+        )
+    except Exception:
+        log.exception("Failed to persist chat exchange for chat_id=%s", chat_id)
+
+
+def _resolve_chat_session(chat_id: str, provided_session_id: Optional[str] = None) -> tuple[str, bool]:
+    previous_session = _chat_sessions.get(chat_id)
+    base_session = provided_session_id or previous_session
+    session_id, new_session = validate_session(base_session)
+    _chat_sessions[chat_id] = session_id
+
+    if new_session and previous_session and previous_session != session_id:
+        _chat_histories.pop(chat_id, None)
+
+    return session_id, new_session
+
+
+def _history_snippet(history: List[Dict[str, Any]], max_turns: int = 3) -> str:
+    if not history:
+        return ""
+    turns = history[-max_turns:]
+    lines: List[str] = []
+    for turn in turns:
+        q = (turn.get("question") or turn.get("user_question") or "").strip()
+        a = (turn.get("answer") or turn.get("bot_response") or "").strip()
+        if not q and not a:
+            continue
+        line = f"Q: {q}" if q else ""
+        if a:
+            line = f"{line}\nA: {a}" if line else f"A: {a}"
+        if line:
+            lines.append(line)
+    return "\n\n".join(lines)
+
+
+def _apply_history_to_question(question: str, history: List[Dict[str, Any]]) -> str:
+    snippet = _history_snippet(history)
+    if not snippet:
+        return question
+    return f"{question}\n\n[이전 대화 참고]\n{snippet}"
 
 # ★ NEW: 콜백 베이스 URL (환경변수로도 재정의 가능)
 CALLBACK_BASE_URL = os.environ.get("CALLBACK_BASE_URL", "http://localhost:3010")
@@ -194,9 +311,13 @@ async def api_chat_unified():
         answer_text = ""
         status = "DONE"
 
+        session_id: Optional[str] = None
+        if chat_id:
+            session_id, _ = _resolve_chat_session(chat_id, body.get("session_id"))
+
         if qtype == 1:
             # ----- /query/text2sql 로직 호출 -----
-            session_id, new_session = validate_session(body.get("session_id"))
+            history = _get_chat_history(chat_id)
             final_sql, results_df, response = await chat_generate_sql_results(
                 session_id,
                 user_grouping,
@@ -211,7 +332,8 @@ async def api_chat_unified():
 
         elif qtype == 2:
             # ----- /omop/concept_chat 로직 호출 -----
-            payload = await concept_chat_run(question, top_k=int(top_k))
+            history = _get_chat_history(chat_id)
+            payload = await concept_chat_run(question, top_k=int(top_k), history=history)
             # payload에서 문자열 응답 필드 우선 추출
             if isinstance(payload, dict):
                 answer_text = payload.get("answer") or payload.get("message") \
@@ -221,6 +343,7 @@ async def api_chat_unified():
 
         elif qtype == 3:
             # ----- /papers/search 로직 호출 (요약 있으면 사용) -----
+            history = _get_chat_history(chat_id)
             embedder = EmbedderAgent("local", "BAAI/bge-m3")
             query_emb = embedder.create(question)
 
@@ -246,7 +369,8 @@ async def api_chat_unified():
             # 요약이 켜져 있으면 요약 생성(가능하면)
             if summarize and results:
                 try:
-                    answer_text = Responder.run_paper(question, json.dumps(results, ensure_ascii=False))
+                    contextual_question = _apply_history_to_question(question, history)
+                    answer_text = Responder.run_paper(contextual_question, json.dumps(results, ensure_ascii=False))
                 except Exception:
                     # 요약 실패 시 타이틀 나열
                     titles = [x.get("title") for x in results if x.get("title")]
@@ -257,6 +381,8 @@ async def api_chat_unified():
 
         else:
             return jsonify({"Error": f"Unsupported questionType: {qtype}"}), 400
+
+        _remember_exchange(chat_id, qtype, question, answer_text, session_id)
 
         # ---- 콜백 전송 ----
         _post_callback(chat_id, answer_text, status="DONE")
