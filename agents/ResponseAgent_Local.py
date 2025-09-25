@@ -1,6 +1,6 @@
 from abc import ABC
 import requests
-from utilities import PROMPTS, format_prompt
+from utilities import PROMPTS, format_prompt , CHAT_MODEL, CHAT_MODEL_URL
 from .core import Agent
 import re
 
@@ -14,8 +14,8 @@ class ResponseAgent:
 
     def __init__(
         self,
-        model: str = "hopephoto/Qwen3-4B-Instruct-2507_q8",
-        host: str = "http://192.168.0.230:11434",
+        model: str = CHAT_MODEL,
+        host: str = CHAT_MODEL_URL,
         max_tokens: int = 1024,
         temperature: float = 0.2,
         top_p: float = 1.0,

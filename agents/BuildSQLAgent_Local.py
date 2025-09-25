@@ -5,7 +5,7 @@ import json
 import requests
 from typing import List, Optional, Tuple
 
-from utilities import PROMPTS, format_prompt
+from utilities import PROMPTS, format_prompt , CHAT_MODEL, CHAT_MODEL_URL
 # 기존 BuildSQLAgent가 상속하던 Agent의 기능(세션/LLM호출)을
 # 로컬 LLM 호출 코드로 치환합니다. start_chat / generate_llm_response 없이 동작.
 
@@ -18,8 +18,8 @@ class BuildSQLAgent_Local:
 
     def __init__(
         self,
-        model: str = "qwen3:8b",
-        host: str = "http://192.168.0.230:11434",
+        model: str = CHAT_MODEL,
+        host: str = CHAT_MODEL_URL,
         max_tokens: int = 1024,
         temperature: float = 0.2,
         top_p: float = 1.0,

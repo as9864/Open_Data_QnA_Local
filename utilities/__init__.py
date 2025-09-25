@@ -111,6 +111,15 @@ PG_CONN_STRING = config.get("LOCAL","PG_CONN_STRING", fallback="")
 PG_LOCAL = config.get("LOCAL", "pglocal", fallback="postgres")
 LOCAL_USER_GROUPING =  config.get("LOCAL", "user_grouping", fallback="cdm")
 
+CALL_BACK_URL = config.get("CONFIG","CALL_BACK_URL" , fallback="http://caus.re.kr:3010")
+
+CHAT_MODEL = config.get("CONFIG","CHAT_MODEL" , fallback="timHan/llama3korean8B4QKM:latest")
+
+CHAT_MODEL_URL = config.get("CONFIG","CHAT_MODEL_URL" , fallback="http://222.236.26.27:25123")
+
+
+
+
 
 __all__ = [
     "MODE",
@@ -146,4 +155,7 @@ __all__ = [
     "PG_CLOUD_AUDIT_CONN",
     "LOCAL_SQLITE_DB",
     "PG_CONN_STRING",
+    "CALL_BACK_URL",
+    "CHAT_MODEL",
+    "CHAT_MODEL_URL",
 ]

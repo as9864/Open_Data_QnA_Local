@@ -7,6 +7,7 @@ import requests
 import re, unicodedata
 import json as _json
 
+from utilities import CHAT_MODEL, CHAT_MODEL_URL
 
 def _normalize_text(s: str) -> str:
     if not isinstance(s, str):
@@ -42,11 +43,11 @@ class LocalOllamaResponder:
     """
 
 
-    def __init__(self, model: str = "hopephoto/Qwen3-4B-Instruct-2507_q8",
+    def __init__(self, model: str = CHAT_MODEL,
                  max_tokens: int = 220,
                  temperature: float = 0.2,
                  preview_rows: int = 5,
-                 host: str = "http://192.168.0.230:11434"):
+                 host: str = CHAT_MODEL_URL):
         self.model = model
         self.max_tokens = max_tokens
         self.temperature = temperature

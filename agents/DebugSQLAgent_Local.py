@@ -6,7 +6,7 @@ import requests
 from typing import Optional, Tuple, List
 import pandas as pd
 
-from utilities import PROMPTS, format_prompt
+from utilities import PROMPTS, format_prompt , CHAT_MODEL, CHAT_MODEL_URL
 from dbconnectors import data_pgconnector, bqconnector  # test_sql_plan_execution 재사용
 
 class DebugSQLAgent_Local:
@@ -19,8 +19,8 @@ class DebugSQLAgent_Local:
 
     def __init__(
         self,
-        model: str = "hopephoto/Qwen3-4B-Instruct-2507_q8",
-        host: str = "http://192.168.0.230:11434",
+        model: str = CHAT_MODEL,
+        host: str = CHAT_MODEL_URL,
         max_tokens: int = 1024,
         temperature: float = 0.2,
         top_p: float = 1.0,

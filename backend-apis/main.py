@@ -55,14 +55,18 @@ import json
 import logging as log
 import requests
 
+from utilities import CALL_BACK_URL , CHAT_MODEL, CHAT_MODEL_URL
+
+
+
 
 #Local Ollama Responder Model
 Responder = ResponderClass(
-    model="hopephoto/Qwen3-4B-Instruct-2507_q8",  # ← 권장(양자화로 CPU 쾌적)
+    model=CHAT_MODEL,  # ← 권장(양자화로 CPU 쾌적)
     max_tokens=220,
     temperature=0.2,
     preview_rows=5,
-    host="http://192.168.0.230:11434"
+    host=CHAT_MODEL_URL
 )
 
 
@@ -203,7 +207,7 @@ def _apply_history_to_question(question: str, history: List[Dict[str, Any]]) -> 
     return f"{question}\n\n[이전 대화 참고]\n{snippet}"
 
 # ★ NEW: 콜백 베이스 URL (환경변수로도 재정의 가능)
-CALLBACK_BASE_URL = os.environ.get("CALLBACK_BASE_URL", "http://localhost:3010")
+CALLBACK_BASE_URL = os.environ.get("CALLBACK_BASE_URL", CALL_BACK_URL)
 
 def _callback_url(chat_id: str) -> str:
     chat_id_enc = urllib.parse.quote(str(chat_id or ""), safe="")
@@ -261,9 +265,9 @@ DEBUGGING_ROUNDS = 2
 LLM_VALIDATION = True
 EXECUTE_FINAL_SQL = True
 Embedder_model = 'local'
-SQLBuilder_model = 'hopephoto/Qwen3-4B-Instruct-2507_q8'
-SQLChecker_model = 'hopephoto/Qwen3-4B-Instruct-2507_q8'
-SQLDebugger_model = 'hopephoto/Qwen3-4B-Instruct-2507_q8'
+SQLBuilder_model = 'timHan/llama3korean8B4QKM:latest'
+SQLChecker_model = 'timHan/llama3korean8B4QKM:latest'
+SQLDebugger_model = 'timHan/llama3korean8B4QKM:latest'
 num_table_matches = 5
 num_column_matches = 10
 table_similarity_threshold = 0.3

@@ -5,7 +5,7 @@ import pandas as pd
 
 from agents import EmbedderAgent, BuildSQLAgent_Local, DebugSQLAgent_Local, ValidateSQLAgent_Local, ResponseAgent,VisualizeAgent
 from utilities import (PROJECT_ID, PG_REGION, BQ_REGION, EXAMPLES, LOGGING, VECTOR_STORE,
-                       BQ_OPENDATAQNA_DATASET_NAME, USE_SESSION_HISTORY)
+                       BQ_OPENDATAQNA_DATASET_NAME, USE_SESSION_HISTORY, CHAT_MODEL, CHAT_MODEL_URL)
 from dbconnectors import (
     bqconnector,
     data_pgconnector,
@@ -19,11 +19,11 @@ from agents.Agent_local import LocalOllamaResponder as ResponderClass
 
 #Local Ollama Responder Model
 Responder = ResponderClass(
-    model="hopephoto/Qwen3-4B-Instruct-2507_q8",  # ← 권장(양자화로 CPU 쾌적)
+    model=CHAT_MODEL,  # ← 권장(양자화로 CPU 쾌적)
     max_tokens=220,
     temperature=0.2,
     preview_rows=5,
-    host="http://192.168.0.230:11434"
+    host=CHAT_MODEL_URL
 )
 
 
@@ -205,16 +205,16 @@ async def generate_sql(session_id,
         print("Loading Agents.")
         embedder = EmbedderAgent(Embedder_model)
         SQLBuilder = BuildSQLAgent_Local.BuildSQLAgent_Local(
-            model="hopephoto/Qwen3-4B-Instruct-2507_q8",  # ollama pull qwen2.5:3b-instruct-q4_K_M
-            host="http://192.168.0.230:11434",
+            model=CHAT_MODEL,  # ollama pull qwen2.5:3b-instruct-q4_K_M
+            host=CHAT_MODEL_URL,
             max_tokens=1024,
             temperature=0.2,
             top_p=0.9,
             timeout_sec=300,
         )
-        SQLChecker = ValidateSQLAgent_Local.ValidateSQLAgentLocal(model="hopephoto/Qwen3-4B-Instruct-2507_q8",
-    host="http://192.168.0.230:11434",)
-        SQLDebugger = DebugSQLAgent_Local.DebugSQLAgent_Local(model="hopephoto/Qwen3-4B-Instruct-2507_q8", host="http://192.168.0.230:11434")
+        SQLChecker = ValidateSQLAgent_Local.ValidateSQLAgentLocal(model=CHAT_MODEL,
+    host=CHAT_MODEL_URL,)
+        SQLDebugger = DebugSQLAgent_Local.DebugSQLAgent_Local(model=CHAT_MODEL, host=CHAT_MODEL_URL)
 
         re_written_qe=user_question
 
@@ -506,7 +506,7 @@ def get_results_multi(user_sql_map: dict[str, str], EXECUTE_FINAL_SQL: bool = Tr
 
     return combined_df, errors
 
-def get_response(session_id,user_question,result_df,Responder_model='hopephoto/Qwen3-4B-Instruct-2507_q8'):
+def get_response(session_id,user_question,result_df,Responder_model='timHan/llama3korean8B4QKM:latest'):
     try:
 
 
@@ -549,10 +549,10 @@ async def run_pipeline(session_id,
                 DEBUGGING_ROUNDS = 2, 
                 LLM_VALIDATION=False,
                 Embedder_model='local',
-                SQLBuilder_model= 'hopephoto/Qwen3-4B-Instruct-2507_q8',
-                SQLChecker_model= 'hopephoto/Qwen3-4B-Instruct-2507_q8',
-                SQLDebugger_model= 'hopephoto/Qwen3-4B-Instruct-2507_q8',
-                Responder_model= 'hopephoto/Qwen3-4B-Instruct-2507_q8',
+                SQLBuilder_model= 'timHan/llama3korean8B4QKM:latest',
+                SQLChecker_model= 'timHan/llama3korean8B4QKM:latest',
+                SQLDebugger_model= 'timHan/llama3korean8B4QKM:latest',
+                Responder_model= 'timHan/llama3korean8B4QKM:latest',
                 num_table_matches = 5,
                 num_column_matches = 10,
                 table_similarity_threshold = 0.3,
@@ -572,10 +572,10 @@ async def run_pipeline(session_id,
         DEBUGGING_ROUNDS (int, optional): The number of debugging rounds to perform. Defaults to 2.
         LLM_VALIDATION (bool, optional): Whether to use LLM for validation. Defaults to True.
         Embedder_model (str, optional): The name of the embedding model. Defaults to 'vertex'.
-        SQLBuilder_model (str, optional): The name of the SQL builder model. Defaults to 'hopephoto/Qwen3-4B-Instruct-2507_q8'.
-        SQLChecker_model (str, optional): The name of the SQL checker model. Defaults to 'hopephoto/Qwen3-4B-Instruct-2507_q8'.
-        SQLDebugger_model (str, optional): The name of the SQL debugger model. Defaults to 'hopephoto/Qwen3-4B-Instruct-2507_q8'.
-        Responder_model (str, optional): The name of the responder model. Defaults to 'hopephoto/Qwen3-4B-Instruct-2507_q8'.
+        SQLBuilder_model (str, optional): The name of the SQL builder model. Defaults to 'timHan/llama3korean8B4QKM:latest'.
+        SQLChecker_model (str, optional): The name of the SQL checker model. Defaults to 'timHan/llama3korean8B4QKM:latest'.
+        SQLDebugger_model (str, optional): The name of the SQL debugger model. Defaults to 'timHan/llama3korean8B4QKM:latest'.
+        Responder_model (str, optional): The name of the responder model. Defaults to 'timHan/llama3korean8B4QKM:latest'.
         num_table_matches (int, optional): The number of table matches to retrieve. Defaults to 5.
         num_column_matches (int, optional): The number of column matches to retrieve. Defaults to 10.
         table_similarity_threshold (float, optional): The similarity threshold for table matching. Defaults to 0.3.
@@ -702,7 +702,7 @@ async def embed_sql(session_id,user_grouping,user_question,generate_sql):
                    The exception message will be included in the returned `embedded` value.
     """ 
     try:
-        Rewriter=ResponseAgent('hopephoto/Qwen3-4B-Instruct-2507_q8')
+        Rewriter=ResponseAgent('timHan/llama3korean8B4QKM:latest')
 
         if session_id is None or session_id=="":
             print("This is a new session")
@@ -725,7 +725,7 @@ async def embed_sql(session_id,user_grouping,user_question,generate_sql):
 
 def visualize(session_id,user_question,generated_sql,sql_results):
     try:
-        Rewriter=ResponseAgent('hopephoto/Qwen3-4B-Instruct-2507_q8')
+        Rewriter=ResponseAgent('timHan/llama3korean8B4QKM:latest')
         
         if session_id is None or session_id=="":
             print("This is a new session")
@@ -769,10 +769,10 @@ if __name__ == '__main__':
     parser.add_argument("--debugging_rounds", type=int, default=2, help="Number of debugging rounds (default: 2)")
     parser.add_argument("--llm_validation", action="store_true", help="Enable LLM validation (default: False)")
     parser.add_argument("--embedder_model", type=str, default='vertex', help="Embedder model name (default: 'vertex')")
-    parser.add_argument("--sqlbuilder_model", type=str, default='hopephoto/Qwen3-4B-Instruct-2507_q8', help="SQL builder model name (default: 'hopephoto/Qwen3-4B-Instruct-2507_q8')")
-    parser.add_argument("--sqlchecker_model", type=str, default='hopephoto/Qwen3-4B-Instruct-2507_q8', help="SQL checker model name (default: 'hopephoto/Qwen3-4B-Instruct-2507_q8')")
-    parser.add_argument("--sqldebugger_model", type=str, default='hopephoto/Qwen3-4B-Instruct-2507_q8', help="SQL debugger model name (default: 'hopephoto/Qwen3-4B-Instruct-2507_q8')")
-    parser.add_argument("--responder_model", type=str, default='hopephoto/Qwen3-4B-Instruct-2507_q8', help="Responder model name (default: 'hopephoto/Qwen3-4B-Instruct-2507_q8')")
+    parser.add_argument("--sqlbuilder_model", type=str, default='timHan/llama3korean8B4QKM:latest', help="SQL builder model name (default: 'timHan/llama3korean8B4QKM:latest')")
+    parser.add_argument("--sqlchecker_model", type=str, default='timHan/llama3korean8B4QKM:latest', help="SQL checker model name (default: 'timHan/llama3korean8B4QKM:latest')")
+    parser.add_argument("--sqldebugger_model", type=str, default='timHan/llama3korean8B4QKM:latest', help="SQL debugger model name (default: 'timHan/llama3korean8B4QKM:latest')")
+    parser.add_argument("--responder_model", type=str, default='timHan/llama3korean8B4QKM:latest', help="Responder model name (default: 'timHan/llama3korean8B4QKM:latest')")
     parser.add_argument("--num_table_matches", type=int, default=5, help="Number of table matches (default: 5)")
     parser.add_argument("--num_column_matches", type=int, default=10, help="Number of column matches (default: 10)")
     parser.add_argument("--table_similarity_threshold", type=float, default=0.1, help="Threshold for table similarity (default: 0.1)")
@@ -812,10 +812,10 @@ if __name__ == '__main__':
     #                                                 DEBUGGING_ROUNDS = 2, 
     #                                                 LLM_VALIDATION=True,
     #                                                 Embedder_model='local',
-    #                                                 SQLBuilder_model= 'hopephoto/Qwen3-4B-Instruct-2507_q8',
-    #                                                 SQLChecker_model= 'hopephoto/Qwen3-4B-Instruct-2507_q8',
-    #                                                 SQLDebugger_model= 'hopephoto/Qwen3-4B-Instruct-2507_q8',
-    #                                                 Responder_model= 'hopephoto/Qwen3-4B-Instruct-2507_q8',
+    #                                                 SQLBuilder_model= 'timHan/llama3korean8B4QKM:latest',
+    #                                                 SQLChecker_model= 'timHan/llama3korean8B4QKM:latest',
+    #                                                 SQLDebugger_model= 'timHan/llama3korean8B4QKM:latest',
+    #                                                 Responder_model= 'timHan/llama3korean8B4QKM:latest',
     #                                                 num_table_matches = 5,
     #                                                 num_column_matches = 10,
     #                                                 table_similarity_threshold = 0.1,
