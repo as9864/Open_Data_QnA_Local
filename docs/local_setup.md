@@ -15,7 +15,7 @@ connector_backend = local
 
 [LOCAL]
 # PostgreSQL connection string
-pg_conn = postgresql+psycopg2://user:pass@localhost:5432/opendataqna
+pg_conn = postgresql+psycopg://user:pass@localhost:5432/opendataqna
 # SQLite database used for the BigQuery and Firestore connectors
 sqlite_db = opendataqna.db
 ```

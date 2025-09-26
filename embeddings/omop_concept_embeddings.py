@@ -34,7 +34,9 @@ def _normalize_pg_url(url: str) -> str:
     return (
         (url or "").strip()
         .replace("postgresql+psycopg2://", "postgresql://")
+        .replace("postgresql+psycopg://", "postgresql://")
         .replace("postgres+psycopg2://", "postgresql://")
+        .replace("postgres+psycopg://", "postgresql://")
         .replace("postgres://", "postgresql://")
     )
 

@@ -1,7 +1,7 @@
 """Local PostgreSQL connector.
 
 This module provides a lightweight connector implementation that uses
-``sqlalchemy`` and ``psycopg2`` to talk to a locally running PostgreSQL
+``sqlalchemy`` and ``psycopg`` (psycopg 3) to talk to a locally running PostgreSQL
 instance.  It mirrors the :class:`PgConnector` interface used for the
 cloud implementation but avoids any dependency on Google Cloud specific
 libraries so that the application can be executed completely offline.
@@ -26,6 +26,32 @@ from typing import Optional
 from utilities import root_dir
 # from google.cloud.sql.connector import Connector
 
+def _normalize_sqlalchemy_conn_str(conn_str: str) -> str:
+    """Return *conn_str* with a psycopg3-compatible SQLAlchemy driver."""
+
+    conn_str = (conn_str or "").strip()
+    if not conn_str:
+        return conn_str
+
+    if conn_str.startswith("postgres://"):
+        conn_str = "postgresql://" + conn_str[len("postgres://"):]
+
+    scheme, sep, rest = conn_str.partition("://")
+    if not sep:
+        return conn_str
+
+    if scheme.startswith("postgresql+"):
+        driver = scheme.split("+", 1)[1]
+        if driver == "psycopg2":
+            return "postgresql+psycopg://" + rest
+        return conn_str
+
+    if scheme == "postgresql":
+        return "postgresql+psycopg://" + rest
+
+    return conn_str
+
+
 class LocalPgConnector(DBConnector, ABC):
     """Connector for a local PostgreSQL database.
 
@@ -33,7 +59,7 @@ class LocalPgConnector(DBConnector, ABC):
     ----------
     conn_str:
         SQLAlchemy style connection string (e.g.
-        ``postgresql+psycopg2://user:pass@localhost/db``).
+        ``postgresql+psycopg://user:pass@localhost/db``).
     """
 
     def __init__(self, conn_str: str, *, ensure_audit_table: bool = False):
@@ -49,8 +75,9 @@ class LocalPgConnector(DBConnector, ABC):
             and vector connectors avoid unnecessary checks.
         """
 
-        self.conn_str = conn_str
-        self.engine = create_engine(conn_str)
+        normalized_conn_str = _normalize_sqlalchemy_conn_str(conn_str)
+        self.conn_str = normalized_conn_str
+        self.engine = create_engine(normalized_conn_str)
         if ensure_audit_table:
             self._ensure_audit_table()
 
