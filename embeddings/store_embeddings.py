@@ -17,7 +17,9 @@ from utilities import PG_VECTOR_CONN, EMBEDDING_MODEL, VECTOR_STORE, PG_LOCAL, L
 def _normalize_pg_url(url: str) -> str:
     return (url or "").strip()\
         .replace("postgresql+psycopg2://", "postgresql://")\
+        .replace("postgresql+psycopg://", "postgresql://")\
         .replace("postgres+psycopg2://", "postgresql://")\
+        .replace("postgres+psycopg://", "postgresql://")\
         .replace("postgres://", "postgresql://")
 
 _PG_CONNSTR = _normalize_pg_url(PG_VECTOR_CONN or "")
