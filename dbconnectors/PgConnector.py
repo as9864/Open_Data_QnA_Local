@@ -12,11 +12,17 @@ from pg8000.exceptions import DatabaseError
 from datetime import datetime
 from typing import Optional
 
-from utilities import root_dir
-from google.cloud.sql.connector import Connector
-
 from dbconnectors import DBConnector
 from abc import ABC
+
+
+def _load_known_good_sql_df() -> pd.DataFrame:
+    """Lazy import helper to avoid circular imports during test discovery."""
+
+    from embeddings.kgq_embeddings import load_kgq_df
+
+    return load_kgq_df()
+
 
 
 
@@ -179,9 +185,7 @@ class PgConnector(DBConnector, ABC):
     
     async def cache_known_sql(self):
         
-        df = pd.read_csv(f"{root_dir}/{scripts}/known_good_sql.csv")
-        df = df.loc[:, ["prompt", "sql", "database_name"]]
-        df = df.dropna()
+        df = _load_known_good_sql_df()
 
         loop = asyncio.get_running_loop()
         async with Connector(loop=loop) as connector:

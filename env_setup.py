@@ -368,7 +368,7 @@ async def create_kgq_sql_table():
     else:
         print("⚠️ WARNING: No Known Good Queries are provided to create query cache for Few shot examples!")
         print("Creating a query cache is highly recommended for best outcomes")
-        print("If no Known Good Queries for the dataset are availabe at this time, you can use 3_LoadKnownGoodSQL.ipynb to load them later!!")
+        print("If no Known Good Queries are available yet, follow the README instructions in the 'Known Good SQL cache' section to add them later.")
 
 
 
@@ -433,7 +433,7 @@ async def store_kgq_sql_embeddings():
     else:
         print("⚠️ WARNING: No Known Good Queries are provided to create query cache for Few shot examples!")
         print("Creating a query cache is highly recommended for best outcomes")
-        print("If no Known Good Queries for the dataset are availabe at this time, you can use 3_LoadKnownGoodSQL.ipynb to load them later!!")
+        print("If no Known Good Queries are available yet, follow the README instructions in the 'Known Good SQL cache' section to add them later.")
 
 
 def create_firestore_db(firestore_region=FIRESTORE_REGION,firestore_database="opendataqna-session-logs"):
