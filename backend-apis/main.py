@@ -30,8 +30,6 @@ import pandas as pd
 from flask_cors import CORS
 import os
 import sys
-import firebase_admin
-from firebase_admin import credentials, auth
 from functools import wraps
 
 from typing import Any, Dict, List, Optional
@@ -41,7 +39,6 @@ from agents import EmbedderAgent
 from pgvector.psycopg import register_vector
 from dbconnectors import audit_pgconnector
 
-firebase_admin.initialize_app()
 
 from services.chat import generate_sql_results as chat_generate_sql_results
 from services.omop_concept_chat import run as concept_chat_run
@@ -238,26 +235,33 @@ def validate_session(session_id: str) -> tuple[str, bool]:
     return session_id, new_session
 
 
+LOCAL_AUTH_TOKEN = os.environ.get("LOCAL_AUTH_TOKEN")
+
+
+def _authorization_token(header: Optional[str]) -> Optional[str]:
+    if not header:
+        return None
+    parts = header.split()
+    if len(parts) == 1:
+        return parts[0]
+    if len(parts) >= 2 and parts[0].lower() == "bearer":
+        return parts[1]
+    return parts[-1]
+
+
 def jwt_authenticated(func: Callable[..., int]) -> Callable[..., int]:
     @wraps(func)
     async def decorated_function(*args, **kwargs):
-        header = request.headers.get("Authorization", None)
-        if header:
-            token = header.split(" ")[1]
-            try:
-                
-                print("TOKEN::"+str(token))
-                decoded_token = firebase_admin.auth.verify_id_token(token)
-            except Exception as e:
-                log.exception(e)
-                return Response(status=403, response=f"Error with authentication: {e}")
-        else:
-            return Response(status=401)
-        
-        request.uid = decoded_token["uid"]
-        print("USER:: "+str(request.uid))
+        if LOCAL_AUTH_TOKEN:
+            header = request.headers.get("Authorization")
+            token = _authorization_token(header)
+            if not token:
+                return Response(status=401, response="Missing Authorization header")
+            if token != LOCAL_AUTH_TOKEN:
+                return Response(status=403, response="Invalid local auth token")
+        request.uid = "local-user"
         return await func(*args, **kwargs) if asyncio.iscoroutinefunction(func) else func(*args, **kwargs)
-    
+
     return decorated_function
 
 RUN_DEBUGGER = True
@@ -408,7 +412,7 @@ async def api_chat_unified():
 
 
 @app.route("/available_databases", methods=["GET"])
-# @jwt_authenticated
+@jwt_authenticated
 def getBDList():
 
     result,invalid_response=get_all_databases()
@@ -432,7 +436,7 @@ def getBDList():
 
 
 @app.route("/embed_sql", methods=["POST"])
-# @jwt_authenticated
+@jwt_authenticated
 async def embedSql():
 
     envelope = str(request.data.decode('utf-8'))
@@ -465,7 +469,7 @@ async def embedSql():
 
 
 @app.route("/run_query", methods=["POST"])
-# @jwt_authenticated
+@jwt_authenticated
 def getSQLResult():
     
     envelope = str(request.data.decode('utf-8'))
@@ -513,7 +517,7 @@ def getSQLResult():
 
 
 @app.route("/chat", methods=["POST"])
-# @jwt_authenticated
+@jwt_authenticated
 async def chat():
     try:
         envelope = request.get_json()
@@ -565,7 +569,7 @@ async def omop_concept_chat():
 
 
 @app.route("/get_known_sql", methods=["POST"])
-# @jwt_authenticated
+@jwt_authenticated
 def getKnownSQL():
     print("Extracting the known SQLs from the example embeddings.")
     envelope = str(request.data.decode('utf-8'))
@@ -594,7 +598,7 @@ def getKnownSQL():
 
 
 @app.route("/generate_sql", methods=["POST"])
-# @jwt_authenticated
+@jwt_authenticated
 async def generateSQL():
     print("Here is the request payload ")
     envelope = str(request.data.decode('utf-8'))
@@ -642,7 +646,7 @@ async def generateSQL():
 
 
 @app.route("/generate_viz", methods=["POST"])
-# @jwt_authenticated
+@jwt_authenticated
 async def generateViz():
     envelope = str(request.data.decode('utf-8'))
     # print("Here is the request payload " + envelope)
@@ -686,7 +690,7 @@ async def generateViz():
         return jsonify(responseDict)
 
 @app.route("/summarize_results", methods=["POST"])
-# @jwt_authenticated
+@jwt_authenticated
 async def getSummary():
     envelope = str(request.data.decode('utf-8'))
     envelope=json.loads(envelope)
@@ -715,7 +719,7 @@ async def getSummary():
 
 
 @app.route("/natural_response", methods=["POST"])
-# @jwt_authenticated
+@jwt_authenticated
 async def getNaturalResponse():
    envelope = str(request.data.decode('utf-8'))
    #print("Here is the request payload " + envelope)
