@@ -12,10 +12,10 @@ config = configparser.ConfigParser()
 
 def is_root_dir() -> bool:
     """Return True if the current working directory is the project root."""
+
     current_dir = os.getcwd()
-    notebooks_path = os.path.join(current_dir, "notebooks")
-    agents_path = os.path.join(current_dir, "agents")
-    return os.path.exists(notebooks_path) or os.path.exists(agents_path)
+    sentinels = ("backend-apis", "agents")
+    return any(os.path.exists(os.path.join(current_dir, sentinel)) for sentinel in sentinels)
 
 
 def load_yaml(file_path: str) -> dict:
@@ -33,6 +33,12 @@ config_path = os.path.join(root_dir, "config.ini")
 config.read(config_path, encoding="utf-8")  # 필요 시 "utf-8-sig"
 if not config.sections():
     raise FileNotFoundError("config.ini not found in current or parent directories.")
+
+
+def _default_known_good_sql_path() -> str:
+    """Return the default location for the known good SQL cache CSV."""
+
+    return os.path.join(root_dir, "data", "known_good_sql.csv")
 
 
 def format_prompt(context_prompt, **kwargs):
@@ -119,6 +125,13 @@ CHAT_MODEL_URL = config.get("CONFIG","CHAT_MODEL_URL" , fallback="http://222.236
 
 LOCAL_AUTH_TOKEN = config.get("LOCAL", "LOCAL_AUTH_TOKEN", fallback="")
 
+# Known good SQL configuration (optional for local deployments)
+KNOWN_GOOD_SQL_PATH = config.get(
+    "LOCAL",
+    "KNOWN_GOOD_SQL_PATH",
+    fallback=_default_known_good_sql_path(),
+)
+
 
 
 __all__ = [
@@ -159,4 +172,5 @@ __all__ = [
     "CHAT_MODEL",
     "CHAT_MODEL_URL",
     "LOCAL_AUTH_TOKEN",
+    "KNOWN_GOOD_SQL_PATH",
 ]

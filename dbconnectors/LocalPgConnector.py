@@ -17,13 +17,20 @@ import asyncio
 import pandas as pd
 from sqlalchemy import create_engine, text, bindparam
 from pgvector.sqlalchemy import Vector
-import scripts
+
 from .core import DBConnector
 
 from datetime import datetime
 from typing import Optional
 
-from utilities import root_dir
+
+def _load_known_good_sql_df() -> pd.DataFrame:
+    """Lazy import helper to avoid circular imports during test discovery."""
+
+    from embeddings.kgq_embeddings import load_kgq_df
+
+    return load_kgq_df()
+
 # from google.cloud.sql.connector import Connector
 
 def _normalize_sqlalchemy_conn_str(conn_str: str) -> str:
@@ -175,9 +182,7 @@ class LocalPgConnector(DBConnector, ABC):
         로컬(Postgres) 전용. Cloud SQL Connector/ADC 불필요.
         """
         # 1) CSV 로드 & 정리
-        df = pd.read_csv(f"{root_dir}/{scripts}/known_good_sql.csv")
-        df = df.loc[:, ["prompt", "sql", "database_name"]].dropna()
-        df = df.rename(columns={"database_name": "user_grouping"})
+        df = _load_known_good_sql_df()
 
         # 2) 동기 DB 작업을 스레드로 실행 (스트림릿/비동기 충돌 방지)
         def _work():

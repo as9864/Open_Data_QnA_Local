@@ -1,8 +1,10 @@
 import os
 import asyncio
+from pathlib import Path
+
 import asyncpg
-import pandas as pd
 import numpy as np
+import pandas as pd
 from pgvector.asyncpg import register_vector
 from google.cloud.sql.connector import Connector
 from google.cloud import bigquery
@@ -19,6 +21,8 @@ from utilities import (
     BQ_REGION,
     EMBEDDING_MODEL,
     EMBEDDING_MODEL_PATH,
+    KNOWN_GOOD_SQL_PATH,
+    root_dir,
 )
 
 
@@ -175,26 +179,28 @@ async def store_kgq_embeddings(df_kgq,
     else: raise ValueError("Not a valid parameter for a vector store.")
 
 
-def load_kgq_df():
-    import pandas as pd
-    
-    def is_root_dir():
-        current_dir = os.getcwd()
-        notebooks_path = os.path.join(current_dir, "notebooks")
-        agents_path = os.path.join(current_dir, "agents")
-        
-        return os.path.exists(notebooks_path) or os.path.exists(agents_path)
+def _resolve_known_good_sql_path(path: str | os.PathLike[str] | None = None) -> Path:
+    """Return the configured path to the known good SQL CSV file."""
 
-    if is_root_dir():
-        current_dir = os.getcwd()
-        root_dir = current_dir
-    else:
-        root_dir = os.path.abspath(os.path.join(os.getcwd(), '..'))
+    configured = Path(path or KNOWN_GOOD_SQL_PATH)
+    if not configured.is_absolute():
+        configured = Path(root_dir) / configured
 
-    file_path = root_dir + "/scripts/known_good_sql.csv"
+    if not configured.exists():
+        raise FileNotFoundError(
+            "known_good_sql.csv file not found. "
+            "Place your cache file at "
+            f"{configured} or update LOCAL.KNOWN_GOOD_SQL_PATH in config.ini."
+        )
 
-    # Load the file
-    df_kgq = pd.read_csv(file_path)
+    return configured
+
+
+def load_kgq_df(path: str | os.PathLike[str] | None = None) -> pd.DataFrame:
+    """Load and normalise the known good SQL cache CSV."""
+
+    csv_path = _resolve_known_good_sql_path(path)
+    df_kgq = pd.read_csv(csv_path)
     df_kgq = df_kgq.loc[:, ["prompt", "sql", "user_grouping"]]
     df_kgq = df_kgq.dropna()
 
@@ -206,22 +212,12 @@ if __name__ == '__main__':
     from utilities import PROJECT_ID, PG_INSTANCE, PG_DATABASE, PG_USER, PG_PASSWORD, PG_REGION
     VECTOR_STORE = "cloudsql-pgvector"
     
-    current_dir = os.getcwd()
-    root_dir = os.path.expanduser('~')  # Start at the user's home directory
+    csv_path = _resolve_known_good_sql_path()
 
-    while current_dir != root_dir:
-        for dirpath, dirnames, filenames in os.walk(current_dir):
-            config_path = os.path.join(dirpath, 'known_good_sql.csv')
-            if os.path.exists(config_path):
-                file_path = config_path  # Update root_dir to the found directory
-                break  # Stop outer loop once found
-
-        current_dir = os.path.dirname(current_dir)
-
-    print("Known Good SQL Found at Path :: "+file_path)
+    print("Known Good SQL Found at Path :: " + str(csv_path))
 
     # Load the file
-    df_kgq = pd.read_csv(file_path)
+    df_kgq = pd.read_csv(csv_path)
     df_kgq = df_kgq.loc[:, ["prompt", "sql", "database_name"]]
     df_kgq = df_kgq.dropna()
 
