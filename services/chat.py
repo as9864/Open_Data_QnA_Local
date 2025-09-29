@@ -1,6 +1,8 @@
 import asyncio
 import pandas as pd
 
+from utilities import CHAT_MODEL
+
 # Default arguments for run_pipeline. These mirror the previous hard-coded
 # values used in the Streamlit app and API server.
 _DEFAULT_PIPELINE_ARGS = dict(
@@ -9,9 +11,9 @@ _DEFAULT_PIPELINE_ARGS = dict(
     DEBUGGING_ROUNDS=2,
     LLM_VALIDATION=False,
     Embedder_model="local",
-    SQLBuilder_model="gemini-1.5-pro",
-    SQLChecker_model="gemini-1.5-pro",
-    SQLDebugger_model="gemini-1.5-pro",
+    SQLBuilder_model=CHAT_MODEL,
+    SQLChecker_model=CHAT_MODEL,
+    SQLDebugger_model=CHAT_MODEL,
     num_table_matches=5,
     num_column_matches=10,
     table_similarity_threshold=0.1,
