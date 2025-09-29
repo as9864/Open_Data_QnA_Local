@@ -102,6 +102,16 @@ def _get_chat_history(chat_id: str) -> List[Dict[str, Any]]:
     return history
 
 
+async def _get_chat_history_async(chat_id: str) -> List[Dict[str, Any]]:
+    history = _chat_histories.get(chat_id)
+    if history is not None:
+        return history
+
+    history = await asyncio.to_thread(_load_persisted_history, chat_id)
+    _chat_histories[chat_id] = history
+    return history
+
+
 def _load_persisted_history(chat_id: str) -> List[Dict[str, Any]]:
     if not chat_id:
         return []
@@ -312,7 +322,7 @@ async def _process_chat_request(body: dict) -> None:
 
         if qtype == 1:
             # ----- /query/text2sql 로직 호출 -----
-            history = _get_chat_history(chat_id)
+            history = await _get_chat_history_async(chat_id)
             final_sql, results_df, response = await chat_generate_sql_results(
                 session_id,
                 user_grouping,
@@ -327,7 +337,7 @@ async def _process_chat_request(body: dict) -> None:
 
         elif qtype == 2:
             # ----- /omop/concept_chat 로직 호출 -----
-            history = _get_chat_history(chat_id)
+            history = await _get_chat_history_async(chat_id)
             payload = await concept_chat_run(question, top_k=int(top_k), history=history)
             # payload에서 문자열 응답 필드 우선 추출
             if isinstance(payload, dict):
@@ -338,23 +348,26 @@ async def _process_chat_request(body: dict) -> None:
 
         elif qtype == 3:
             # ----- /papers/search 로직 호출 (요약 있으면 사용) -----
-            history = _get_chat_history(chat_id)
+            history = await _get_chat_history_async(chat_id)
             embedder = EmbedderAgent("local", "BAAI/bge-m3")
-            query_emb = embedder.create(question)
+            query_emb = await asyncio.to_thread(embedder.create, question)
 
-            with _pg_connect() as conn:
-                register_vector(conn)
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        SELECT id, title, abstract, metadata
-                        FROM papers_embeddings
-                        ORDER BY embedding <=> %s::vector
-                        LIMIT %s;
-                        """,
-                        (query_emb, int(top_k)),
-                    )
-                    rows = cur.fetchall()
+            def _query_papers() -> list[tuple[Any, ...]]:
+                with _pg_connect() as conn:
+                    register_vector(conn)
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            SELECT id, title, abstract, metadata
+                            FROM papers_embeddings
+                            ORDER BY embedding <=> %s::vector
+                            LIMIT %s;
+                            """,
+                            (query_emb, int(top_k)),
+                        )
+                        return cur.fetchall()
+
+            rows = await asyncio.to_thread(_query_papers)
 
             results = [
                 {"id": r[0], "title": r[1], "abstract": r[2], "metadata": r[3]}
@@ -365,7 +378,11 @@ async def _process_chat_request(body: dict) -> None:
             if summarize and results:
                 try:
                     contextual_question = _apply_history_to_question(question, history)
-                    answer_text = Responder.run_paper(contextual_question, json.dumps(results, ensure_ascii=False))
+                    answer_text = await asyncio.to_thread(
+                        Responder.run_paper,
+                        contextual_question,
+                        json.dumps(results, ensure_ascii=False),
+                    )
                 except Exception:
                     # 요약 실패 시 타이틀 나열
                     titles = [x.get("title") for x in results if x.get("title")]
@@ -377,10 +394,17 @@ async def _process_chat_request(body: dict) -> None:
         else:
             raise ValueError(f"Unsupported questionType: {qtype}")
 
-        _remember_exchange(chat_id, qtype, question, answer_text, session_id)
+        await asyncio.to_thread(
+            _remember_exchange,
+            chat_id,
+            qtype,
+            question,
+            answer_text,
+            session_id,
+        )
 
         # ---- 콜백 전송 ----
-        _post_callback(chat_id, answer_text, status="DONE")
+        await asyncio.to_thread(_post_callback, chat_id, answer_text, "DONE")
 
     except Exception as e:
         log.exception("api_chat_unified failed")
@@ -388,7 +412,7 @@ async def _process_chat_request(body: dict) -> None:
         try:
             chat_id = (body or {}).get("chatId")
             if chat_id:
-                _post_callback(chat_id, f"에러: {e}", status="FAIL")
+                await asyncio.to_thread(_post_callback, chat_id, f"에러: {e}", "FAIL")
         except Exception:
             pass
 

@@ -193,13 +193,20 @@ async def generate_sql(session_id,
         re_written_qe=user_question
 
         print("Getting the history for the session.......\n")
-        session_history = firestoreconnector.get_chat_logs_for_session(session_id) if USE_SESSION_HISTORY else None
+        if USE_SESSION_HISTORY:
+            session_history = await asyncio.to_thread(
+                firestoreconnector.get_chat_logs_for_session, session_id
+            )
+        else:
+            session_history = None
         print("Grabbed history for the session:: "+ str(session_history))
 
         if session_history is None or not session_history:
             print("No records for the session. Not rewriting the question\n")
         else:
-            concated_questions,re_written_qe=SQLBuilder.rewrite_question(user_question,session_history)
+            concated_questions,re_written_qe = await asyncio.to_thread(
+                SQLBuilder.rewrite_question, user_question, session_history
+            )
 
 
         found_in_vector = 'N' # if an exact query match was found 
@@ -209,7 +216,7 @@ async def generate_sql(session_id,
         corrected_sql = ''
         DATA_SOURCE = 'Yet to determine'
 
-        DATA_SOURCE,src_invalid = get_source_type(user_grouping)
+        DATA_SOURCE,src_invalid = await asyncio.to_thread(get_source_type, user_grouping)
 
         if src_invalid:
             raise ValueError(DATA_SOURCE)
@@ -220,7 +227,7 @@ async def generate_sql(session_id,
         # Reset AUDIT_TEXT
         AUDIT_TEXT = 'Creating embedding for given question'
         # Fetch the embedding of the user's input question 
-        embedded_question = embedder.create(re_written_qe)
+        embedded_question = await asyncio.to_thread(embedder.create, re_written_qe)
 
         
 
@@ -228,8 +235,10 @@ async def generate_sql(session_id,
         process_step = "\n\nGet Exact Match: "
 
         # Look for exact matches in known questions IF kgq is enabled 
-        if EXAMPLES: 
-            exact_sql_history = vector_connector.getExactMatches(user_question) 
+        if EXAMPLES:
+            exact_sql_history = await asyncio.to_thread(
+                vector_connector.getExactMatches, user_question
+            )
 
         else: exact_sql_history = None 
 
@@ -291,7 +300,16 @@ async def generate_sql(session_id,
 
                 # GENERATE SQL
                 process_step = "\n\nBuild SQL: "
-                generated_sql = SQLBuilder.build_sql(DATA_SOURCE,user_grouping,user_question,session_history,table_matches,column_matches,similar_sql)
+                generated_sql = await asyncio.to_thread(
+                    SQLBuilder.build_sql,
+                    DATA_SOURCE,
+                    user_grouping,
+                    user_question,
+                    session_history,
+                    table_matches,
+                    column_matches,
+                    similar_sql,
+                )
                 final_sql=generated_sql
 
 
@@ -305,8 +323,21 @@ async def generate_sql(session_id,
                 else:
                     invalid_response=False
 
-                    if RUN_DEBUGGER: 
-                        generated_sql, invalid_response, AUDIT_TEXT = SQLDebugger.start_debugger(DATA_SOURCE,user_grouping, generated_sql, user_question, SQLChecker, table_matches, column_matches, AUDIT_TEXT, similar_sql, DEBUGGING_ROUNDS, LLM_VALIDATION) 
+                    if RUN_DEBUGGER:
+                        generated_sql, invalid_response, AUDIT_TEXT = await asyncio.to_thread(
+                            SQLDebugger.start_debugger,
+                            DATA_SOURCE,
+                            user_grouping,
+                            generated_sql,
+                            user_question,
+                            SQLChecker,
+                            table_matches,
+                            column_matches,
+                            AUDIT_TEXT,
+                            similar_sql,
+                            DEBUGGING_ROUNDS,
+                            LLM_VALIDATION,
+                        )
                         # AUDIT_TEXT = AUDIT_TEXT + '\n Feedback from Debugger: \n' + feedback_text
 
 
@@ -322,8 +353,9 @@ async def generate_sql(session_id,
 
         # print(f'\n\n AUDIT_TEXT: \n {AUDIT_TEXT}')
 
-        if LOGGING: 
-            audit_pgconnector.make_audit_entry(
+        if LOGGING:
+            await asyncio.to_thread(
+                audit_pgconnector.make_audit_entry,
                 DATA_SOURCE,
                 user_grouping,
                 SQLBuilder_model,
@@ -344,7 +376,8 @@ async def generate_sql(session_id,
         AUDIT_TEXT=AUDIT_TEXT+ "\nException at SQL generation"
         print("Error :: "+str(error_msg))
         if LOGGING:
-            audit_pgconnector.make_audit_entry(
+            await asyncio.to_thread(
+                audit_pgconnector.make_audit_entry,
                 DATA_SOURCE,
                 user_grouping,
                 SQLBuilder_model,
@@ -358,7 +391,9 @@ async def generate_sql(session_id,
             )
 
     if USE_SESSION_HISTORY and not invalid_response:
-        firestoreconnector.log_chat(session_id,user_question,final_sql,user_id)
+        await asyncio.to_thread(
+            firestoreconnector.log_chat, session_id, user_question, final_sql, user_id
+        )
         print("Session history persisted")  
 
 
@@ -590,13 +625,27 @@ async def run_pipeline(session_id,
 
     if not invalid_response:
         
-        results_df, invalid_response = get_results(user_grouping, 
-                                    final_sql,
-                                    invalid_response=invalid_response,
-                                    EXECUTE_FINAL_SQL=EXECUTE_FINAL_SQL)
+        results_df, invalid_response = await asyncio.to_thread(
+            get_results,
+            user_grouping,
+            final_sql,
+            invalid_response=invalid_response,
+            EXECUTE_FINAL_SQL=EXECUTE_FINAL_SQL,
+        )
 
         if not invalid_response:
-            _resp,invalid_response=get_response(session_id,user_question,results_df.to_json(orient='records'),Responder_model=Responder_model)
+            results_json = (
+                results_df.to_json(orient='records')
+                if hasattr(results_df, "to_json")
+                else results_df
+            )
+            _resp,invalid_response = await asyncio.to_thread(
+                get_response,
+                session_id,
+                user_question,
+                results_json,
+                Responder_model=Responder_model,
+            )
         else:
             _resp=results_df
     else:
