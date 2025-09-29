@@ -18,6 +18,7 @@
 
 from flask import Flask, request, jsonify, render_template, Response
 import asyncio
+import threading
 from collections.abc import Callable
 import logging as log
 import json
@@ -33,6 +34,7 @@ import sys
 from functools import wraps
 
 from typing import Any, Dict, List, Optional
+from concurrent.futures import Future
 
 from embeddings.store_papers import _prepare_records, store_papers, _pg_connect
 from agents import EmbedderAgent
@@ -92,6 +94,10 @@ _session_store: dict[str, datetime.datetime] = {}
 CHAT_HISTORY_LIMIT = int(os.environ.get("CHAT_HISTORY_LIMIT", "20"))
 _chat_histories: dict[str, List[Dict[str, Any]]] = {}
 _chat_sessions: dict[str, str] = {}
+
+
+BACKGROUND_LOOP = asyncio.new_event_loop()
+threading.Thread(target=BACKGROUND_LOOP.run_forever, daemon=True).start()
 
 
 def _get_chat_history(chat_id: str) -> List[Dict[str, Any]]:
@@ -417,6 +423,19 @@ async def _process_chat_request(body: dict) -> None:
             pass
 
 
+def enqueue_chat_task(body: dict) -> None:
+    def _log_background_exception(future: Future) -> None:
+        try:
+            future.result()
+        except Exception:
+            log.exception("Background chat task failed")
+
+    future = asyncio.run_coroutine_threadsafe(
+        _process_chat_request(body), BACKGROUND_LOOP
+    )
+    future.add_done_callback(_log_background_exception)
+
+
 @app.route("/api/chat", methods=["POST"])
 @jwt_authenticated
 async def api_chat_unified():
@@ -441,7 +460,7 @@ async def api_chat_unified():
 
     body["questionType"] = qtype
 
-    asyncio.create_task(_process_chat_request(body))
+    enqueue_chat_task(body)
 
     return jsonify({"chatId": chat_id, "chat_status": "PENDING"}), 202
 
