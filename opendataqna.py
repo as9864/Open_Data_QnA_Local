@@ -4,10 +4,14 @@ import uuid
 import pandas as pd
 
 from agents import EmbedderAgent, BuildSQLAgent_Local, DebugSQLAgent_Local, ValidateSQLAgent_Local, ResponseAgent,VisualizeAgent
-from utilities import (PROJECT_ID, PG_REGION, BQ_REGION, EXAMPLES, LOGGING, VECTOR_STORE,
-                       BQ_OPENDATAQNA_DATASET_NAME, USE_SESSION_HISTORY, CHAT_MODEL, CHAT_MODEL_URL)
+from utilities import (
+    EXAMPLES,
+    LOGGING,
+    USE_SESSION_HISTORY,
+    CHAT_MODEL,
+    CHAT_MODEL_URL,
+)
 from dbconnectors import (
-    bqconnector,
     data_pgconnector,
     vector_pgconnector,
     audit_pgconnector,
@@ -27,24 +31,9 @@ Responder = ResponderClass(
 )
 
 
-#Based on VECTOR STORE in config.ini initialize vector connector and region
-if VECTOR_STORE=='bigquery-vector':
-    region=BQ_REGION
-    vector_connector = bqconnector
-    call_await = False
-
-elif VECTOR_STORE == 'cloudsql-pgvector':
-    region=PG_REGION
-    vector_connector = vector_pgconnector
-    call_await=True
-
-elif VECTOR_STORE == 'local-pgvector':
-    region=PG_REGION
-    vector_connector = vector_pgconnector
-    call_await=True
-
-else: 
-    raise ValueError("Please specify a valid Data Store. Supported are either 'bigquery-vector' or 'cloudsql-pgvector'")
+# Vector store is always the local pgvector connector in the offline build
+vector_connector = vector_pgconnector
+VECTOR_STORE_NAME = "local-pgvector"
 
 
 def generate_uuid():
@@ -63,8 +52,8 @@ def generate_uuid():
 def get_all_databases():
     """Retrieves a list of all distinct databases (with source type) from the vector store.
 
-    This function queries the vector store (BigQuery or PostgreSQL) to fetch a list of 
-    unique databases, including their source type. The source type indicates whether 
+    This function queries the local pgvector store (backed by PostgreSQL) to fetch a list of
+    unique databases, including their source type. The source type indicates whether
     the database is a BigQuery dataset or a PostgreSQL schema.
 
     Returns:
@@ -80,14 +69,7 @@ def get_all_databases():
     """
     
     try:
-        if VECTOR_STORE=='bigquery-vector': 
-            final_sql=f'''SELECT
-    DISTINCT user_grouping AS table_schema
-    FROM
-        `{PROJECT_ID}.{BQ_OPENDATAQNA_DATASET_NAME}.table_details_embeddings`'''
-
-        else:
-            final_sql="""SELECT
+        final_sql="""SELECT
     DISTINCT user_grouping AS table_schema
     FROM
     table_details_embeddings"""
@@ -107,7 +89,7 @@ def get_all_databases():
 def get_source_type(user_grouping):
     """Retrieves the source type of a specified database from the vector store.
 
-    This function queries the vector store (BigQuery or PostgreSQL) to determine whether the
+    This function queries the local vector store to determine whether the
     given database is a BigQuery dataset ('bigquery') or a PostgreSQL schema ('postgres').
 
     Args:
@@ -121,22 +103,14 @@ def get_source_type(user_grouping):
     Raises:
         Exception: If there is an issue connecting to or querying the vector store. The exception message will be included in the returned `result`.
     """
-    try: 
-        if VECTOR_STORE=='bigquery-vector': 
-            sql=f'''SELECT
-        DISTINCT source_type
-        FROM
-        `{PROJECT_ID}.{BQ_OPENDATAQNA_DATASET_NAME}.table_details_embeddings`
-        where user_grouping='{user_grouping}' '''
-
-        else:
-            sql=f'''SELECT
+    try:
+        sql=f'''SELECT
         DISTINCT source_type
         FROM
         table_details_embeddings where user_grouping='{user_grouping}' '''
-        
+
         result = vector_connector.retrieve_df(sql)
-        result = (str(result.iloc[0, 0])).lower() 
+        result = (str(result.iloc[0, 0])).lower()
         invalid_response=False
     except Exception as e:
         result="Error at finding the datasource :: "+str(e)
@@ -240,11 +214,8 @@ async def generate_sql(session_id,
         if src_invalid:
             raise ValueError(DATA_SOURCE)
 
-        #vertexai.init(project=PROJECT_ID, location=region)
-        #aiplatform.init(project=PROJECT_ID, location=region)
-
         print("Source selected as : "+ str(DATA_SOURCE) + "\nSchema or Dataset Name is : "+ str(user_grouping))
-        print("Vector Store selected as : "+ str(VECTOR_STORE))
+        print("Vector Store selected as : "+ str(VECTOR_STORE_NAME))
 
         # Reset AUDIT_TEXT
         AUDIT_TEXT = 'Creating embedding for given question'
@@ -276,32 +247,40 @@ async def generate_sql(session_id,
         else:
             # No exact match found. Proceed looking for similar entries in db IF kgq is enabled
 
-            if EXAMPLES: 
+            if EXAMPLES:
                 AUDIT_TEXT = AUDIT_TEXT +  process_step + "\nNo exact match found in query cache, retrieving relevant schema and known good queries for few shot examples using similarity search...."
                 process_step = "\n\nGet Similar Match: "
 
-                if call_await:
-                    similar_sql = await vector_connector.getSimilarMatches('example', user_grouping, embedded_question, num_sql_matches, example_similarity_threshold)
+                similar_sql = await vector_connector.getSimilarMatches(
+                    'example',
+                    user_grouping,
+                    embedded_question,
+                    num_sql_matches,
+                    example_similarity_threshold,
+                )
 
-                else:
-                    similar_sql = vector_connector.getSimilarMatches('example', user_grouping, embedded_question, num_sql_matches, example_similarity_threshold)
-
-
-            else: similar_sql = "No similar SQLs provided..."
+            else:
+                similar_sql = "No similar SQLs provided..."
 
 
 
             process_step = "\n\nGet Table and Column Schema: "
             # Retrieve matching tables and columns
-            if call_await:
 
-                table_matches =  await vector_connector.getSimilarMatches('table', user_grouping, embedded_question, num_table_matches, table_similarity_threshold)
-                column_matches =  await vector_connector.getSimilarMatches('column', user_grouping, embedded_question, num_column_matches, column_similarity_threshold)
-
-            else:
-
-                table_matches =  vector_connector.getSimilarMatches('table', user_grouping, embedded_question, num_table_matches, table_similarity_threshold)
-                column_matches =  vector_connector.getSimilarMatches('column', user_grouping, embedded_question, num_column_matches, column_similarity_threshold)
+            table_matches = await vector_connector.getSimilarMatches(
+                'table',
+                user_grouping,
+                embedded_question,
+                num_table_matches,
+                table_similarity_threshold,
+            )
+            column_matches = await vector_connector.getSimilarMatches(
+                'column',
+                user_grouping,
+                embedded_question,
+                num_column_matches,
+                column_similarity_threshold,
+            )
 
 
             AUDIT_TEXT = AUDIT_TEXT +  process_step + "\nRetrieved Similar Known Good Queries, Table Schema and Column Schema: \n" + '\nRetrieved Tables: \n' + str(table_matches) + '\n\nRetrieved Columns: \n' + str(column_matches) + '\n\nRetrieved Known Good Queries: \n' + str(similar_sql)
@@ -392,8 +371,8 @@ async def generate_sql(session_id,
 def get_results(user_grouping, final_sql, invalid_response=False, EXECUTE_FINAL_SQL=True):
     """Executes the final SQL query (if valid) and retrieves the results.
 
-    This function first determines the data source (BigQuery or PostgreSQL) based on the provided database name.
-    If the SQL query is valid and execution is enabled, it fetches the results using the appropriate connector.
+    This function first determines the data source (PostgreSQL) based on the provided database name.
+    If the SQL query is valid and execution is enabled, it fetches the results using the local connector.
 
     Args:
         user_grouping (str): The name of the database to query.
@@ -416,11 +395,12 @@ def get_results(user_grouping, final_sql, invalid_response=False, EXECUTE_FINAL_
         DATA_SOURCE,src_invalid = get_source_type(user_grouping)
         
         if not src_invalid:
-            ## SET DATA SOURCE 
-            if DATA_SOURCE=='bigquery':
-                src_connector = bqconnector
-            else: 
-                src_connector = data_pgconnector
+            ## SET DATA SOURCE
+            if DATA_SOURCE != 'postgres':
+                raise ValueError(
+                    f"Unsupported data source '{DATA_SOURCE}' for local execution."
+                )
+            src_connector = data_pgconnector
         else:
             raise ValueError(DATA_SOURCE)
 
@@ -632,7 +612,7 @@ async def run_pipeline(session_id,
 def get_kgq(user_grouping):
     """Retrieves known good SQL queries (KGQs) for a specific database from the vector store.
 
-    This function queries the vector store (BigQuery or PostgreSQL) to fetch a limited number of
+    This function queries the local vector store to fetch a limited number of
     distinct user questions and their corresponding generated SQL queries that are relevant to the
     specified database. These KGQs can be used as examples or references for generating new SQL queries.
 
@@ -651,18 +631,9 @@ def get_kgq(user_grouping):
                    The exception message will be included in the returned `result`.
     """  
     try:
-        if VECTOR_STORE=='bigquery-vector': 
-            sql=f'''SELECT distinct
+        sql="""select distinct
         example_user_question,
-        example_generated_sql 
-        FROM
-        `{PROJECT_ID}.{BQ_OPENDATAQNA_DATASET_NAME}.example_prompt_sql_embeddings`
-        where user_grouping='{user_grouping}'  LIMIT 5 '''
-
-        else:
-            sql="""select distinct
-        example_user_question,
-        example_generated_sql 
+        example_generated_sql
         from example_prompt_sql_embeddings
         where user_grouping = '{user_grouping}' LIMIT 5""".format(user_grouping=user_grouping)
 
