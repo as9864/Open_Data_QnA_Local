@@ -202,9 +202,9 @@ async def run(
     """Generate an OMOP concept chat response enriched with retrieved concepts."""
 
     embedder = _get_embedder()
-    raw_embedding = embedder.create(question)
+    raw_embedding = await asyncio.to_thread(embedder.create, question)
     query_embedding = _extract_embedding(raw_embedding)
-    concepts = _query_similar_concepts(query_embedding, limit=top_k)
+    concepts = await asyncio.to_thread(_query_similar_concepts, query_embedding, top_k)
 
     prompt_template = PROMPTS["omop_concept_chat"]
     base_prompt = format_prompt(prompt_template, question=question)

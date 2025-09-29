@@ -623,24 +623,29 @@ class LocalPgConnector(DBConnector, ABC):
     async def getSimilarMatches(self, mode, user_grouping, qe, num_matches, similarity_threshold):
 
         print("localPGConnector getSimilarMatches")
+        match_list = await asyncio.to_thread(
+            self.retrieve_matches,
+            mode,
+            user_grouping,
+            qe,
+            similarity_threshold,
+            num_matches,
+        )
         if mode == 'table':
             print("localPGConnector getSimilarMatches table")
-            match_result = self.retrieve_matches(mode, user_grouping, qe, similarity_threshold, num_matches)
-            match_result = match_result[0]
+            match_result = match_list[0] if match_list else ""
 
         elif mode == 'column':
             print("localPGConnector getSimilarMatches Column")
-            match_result = self.retrieve_matches(mode, user_grouping, qe, similarity_threshold, num_matches)
-            match_result = match_result[0]
+            match_result = match_list[0] if match_list else ""
 
         elif mode == 'example':
             print("localPGConnector getSimilarMatches Example")
-            match_result = self.retrieve_matches(mode, user_grouping, qe, similarity_threshold, num_matches)
-            print("localPGConnector getSimilarMatches match_result" , match_result)
-            if len(match_result) == 0:
+            print("localPGConnector getSimilarMatches match_result" , match_list)
+            if not match_list:
                 match_result = None
             else:
-                match_result = match_result[0]
+                match_result = match_list[0]
 
         return match_result
 
