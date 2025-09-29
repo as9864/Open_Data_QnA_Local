@@ -134,36 +134,31 @@ Rules:
         i = 0
         STOP = False
         invalid_response = False
-        print("debug_SQL 1-1 : ")
+
         chat_session = self.init_chat(
             source_type, user_grouping, tables_schema, columns_schema, similar_sql
         )
-        print("debug_SQL 1-2 : ",chat_session)
+
         sql = (
             query.replace("```sql", "")
                  .replace("```", "")
                  .replace("EXPLAIN ANALYZE ", "")
         )
-        print("debug_SQL 2 : ", sql)
+
         AUDIT_TEXT += "\n\nEntering the debugging steps!"
         while not STOP:
             json_syntax_result = {"valid": True, "errors": "None"}
-            print("debug_SQL 3 : ")
+
             if LLM_VALIDATION:
-                print("debug_SQL 4 : ", LLM_VALIDATION)
                 json_syntax_result = SQLChecker.check(
                     source_type, user_question, tables_schema, columns_schema, sql
                 )
-                print("debug_SQL 5 : ", json_syntax_result)
             else:
                 AUDIT_TEXT += "\nLLM Validation is deactivated. Jumping directly to dry run execution."
-            print("debug_SQL 6 : ", json_syntax_result)
             if json_syntax_result.get("valid", True):
                 AUDIT_TEXT += "\nGenerated SQL is syntactically correct as per LLM Validation!"
                 connector = bqconnector if source_type == "bigquery" else data_pgconnector
-                print("debug_SQL 7 : ", connector)
                 correct_sql, exec_result_df = connector.test_sql_plan_execution(sql)
-                print("debug_SQL 8 : ", correct_sql)
                 if not correct_sql:
                     AUDIT_TEXT += "\nGenerated SQL failed on execution! Feedback from dry run/explain:\n" + str(exec_result_df)
                     rewrite_result = self.rewrite_sql_chat(chat_session, sql, user_question, exec_result_df)
@@ -191,7 +186,7 @@ Rules:
                 AUDIT_TEXT += "\nExceeded the number of iterations for correction! The generated SQL can be invalid!"
                 STOP = True
                 invalid_response = True
-            print(print("debug_SQL 9 : ", AUDIT_TEXT))
+
         return sql, invalid_response, AUDIT_TEXT
 
 

@@ -179,18 +179,17 @@ class LocalOllamaResponder:
 
 
     def run_paper(self, user_question: str, result_df) -> str:
-        print("result_df : ", result_df)
+
         df = self._to_df(result_df)
-        print("df : " , df)
+
         # 규칙 기반 단답
         if "exists" in df.columns and len(df.index) >= 1:
-            print("exists : ", df["exists"].iloc[0])
+
             v = bool(df["exists"].iloc[0])
             return f"질문: {user_question}\n\n결과: {'예' if v else '아니요'} (해당 조건을 만족하는 레코드가 {'존재합니다' if v else '존재하지 않습니다'}.)"
 
         if df.shape == (1, 1):
-            print("df.columns[0] : ",df.columns[0])
-            print("df.iloc[0, 0] : ", df.iloc[0, 0])
+
             col = df.columns[0]
             val = df.iloc[0, 0]
             return f"질문: {user_question}\n\n{col}: {val}"

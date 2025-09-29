@@ -108,16 +108,7 @@ class LocalPgConnector(DBConnector, ABC):
         WHERE lower(example_user_question) = lower('{query}') LIMIT 1; """
 
 
-        print("getExactMatches : " , check_history_sql)
-
-        print("getExactMatches2 : ", query)
-
-
-
-
         exact_sql_history = self.retrieve_df(check_history_sql)
-
-        print("getExactMatches3 : ", exact_sql_history)
 
 
         if exact_sql_history[exact_sql_history.columns[0]].count() != 0:
@@ -129,7 +120,7 @@ class LocalPgConnector(DBConnector, ABC):
                 exact_sql=example_sql
                 sql_example_txt = sql_example_txt + "\n Example_question: "+example_user_question+ "; Example_SQL: "+example_sql
 
-            # print("Found a matching question from the history!" + str(sql_example_txt))
+
             final_sql=exact_sql
 
         else:
@@ -532,7 +523,7 @@ class LocalPgConnector(DBConnector, ABC):
         # pgvector: 바인딩 타입 맞추기
         qe_vec = list(qe)  # ndarray -> list
         dim = len(qe_vec)
-        print(" mode : " , mode , type(qe))
+
         with self.getconn() as conn:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
 
@@ -548,7 +539,6 @@ class LocalPgConnector(DBConnector, ABC):
                     ORDER BY similarity DESC
                     LIMIT :limit
                 """
-                print(" table : ", sql)
                 stmt = (
                     text(sql)
                     .bindparams(bindparam("qe", type_=Vector(dim)))
@@ -572,7 +562,6 @@ class LocalPgConnector(DBConnector, ABC):
                     text(sql)
                     .bindparams(bindparam("qe", type_=Vector(dim)))
                 )
-                print(" column : ", sql)
                 params = {"qe": qe_vec, "threshold": similarity_threshold, "limit": limit}
                 if filter_by_grouping:
                     params["user_grouping"] = user_grouping
@@ -587,7 +576,7 @@ class LocalPgConnector(DBConnector, ABC):
                     ORDER BY similarity DESC
                     LIMIT :limit
                 """
-                print(" example : ", sql)
+
                 stmt = (
                     text(sql)
                     .bindparams(bindparam("qe", type_=Vector(dim)))
@@ -600,10 +589,10 @@ class LocalPgConnector(DBConnector, ABC):
                 }
             else:
                 raise ValueError("mode must be 'table' | 'column' | 'example'")
-            print(" execute before ")
+
             # ✅ 딕셔너리 모드로 받기
             rows = conn.execute(stmt, params).mappings().all()
-            print(" execute after " , rows)
+
         if not rows:
             return [""]
 
@@ -622,7 +611,7 @@ class LocalPgConnector(DBConnector, ABC):
 
     async def getSimilarMatches(self, mode, user_grouping, qe, num_matches, similarity_threshold):
 
-        print("localPGConnector getSimilarMatches")
+
         match_list = await asyncio.to_thread(
             self.retrieve_matches,
             mode,
@@ -632,16 +621,13 @@ class LocalPgConnector(DBConnector, ABC):
             num_matches,
         )
         if mode == 'table':
-            print("localPGConnector getSimilarMatches table")
+
             match_result = match_list[0] if match_list else ""
 
         elif mode == 'column':
-            print("localPGConnector getSimilarMatches Column")
             match_result = match_list[0] if match_list else ""
 
         elif mode == 'example':
-            print("localPGConnector getSimilarMatches Example")
-            print("localPGConnector getSimilarMatches match_result" , match_list)
             if not match_list:
                 match_result = None
             else:

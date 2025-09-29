@@ -110,11 +110,14 @@ def _get_chat_history(chat_id: str) -> List[Dict[str, Any]]:
 
 async def _get_chat_history_async(chat_id: str) -> List[Dict[str, Any]]:
     history = _chat_histories.get(chat_id)
+
     if history is not None:
         return history
 
     history = await asyncio.to_thread(_load_persisted_history, chat_id)
+
     _chat_histories[chat_id] = history
+
     return history
 
 
@@ -192,6 +195,7 @@ def _resolve_chat_session(chat_id: str, provided_session_id: Optional[str] = Non
     if new_session and previous_session and previous_session != session_id:
         _chat_histories.pop(chat_id, None)
 
+
     return session_id, new_session
 
 
@@ -240,16 +244,30 @@ def _post_callback(chat_id: str, answer: str, status: str = "DONE") -> None:
 
 
 
+# def validate_session(session_id: str) -> tuple[str, bool]:
+#     now = datetime.datetime.utcnow()
+#     new_session = False
+#     expiry = _session_store.get(session_id)
+#     if not session_id or expiry is None or expiry < now:
+#         session_id = generate_uuid()
+#         new_session = True
+#     _session_store[session_id] = now + datetime.timedelta(seconds=SESSION_TIMEOUT_SECONDS)
+#     return session_id, new_session
+
 def validate_session(session_id: str) -> tuple[str, bool]:
     now = datetime.datetime.utcnow()
     new_session = False
     expiry = _session_store.get(session_id)
-    if not session_id or expiry is None or expiry < now:
-        session_id = generate_uuid()
-        new_session = True
-    _session_store[session_id] = now + datetime.timedelta(seconds=SESSION_TIMEOUT_SECONDS)
-    return session_id, new_session
 
+    if session_id and expiry and expiry > now:
+        # 기존 세션 연장
+        _session_store[session_id] = now + datetime.timedelta(seconds=SESSION_TIMEOUT_SECONDS)
+        return session_id, False
+    else:
+        # 새 세션 생성
+        new_id = generate_uuid()
+        _session_store[new_id] = now + datetime.timedelta(seconds=SESSION_TIMEOUT_SECONDS)
+        return new_id, True
 
 
 
@@ -322,10 +340,11 @@ async def _process_chat_request(body: dict) -> None:
 
         answer_text = ""
 
+
+
         session_id: Optional[str] = None
         if chat_id:
             session_id, _ = _resolve_chat_session(chat_id, body.get("session_id"))
-
         if qtype == 1:
             # ----- /query/text2sql 로직 호출 -----
             history = await _get_chat_history_async(chat_id)
@@ -340,7 +359,6 @@ async def _process_chat_request(body: dict) -> None:
             else:
                 rows = (len(results_df) if hasattr(results_df, "__len__") else 0)
                 answer_text = f"SQL 생성 완료. rows={rows}\n{final_sql}"
-
         elif qtype == 2:
             # ----- /omop/concept_chat 로직 호출 -----
             history = await _get_chat_history_async(chat_id)
@@ -351,7 +369,6 @@ async def _process_chat_request(body: dict) -> None:
                               or payload.get("text") or json.dumps(payload, ensure_ascii=False)
             else:
                 answer_text = str(payload)
-
         elif qtype == 3:
             # ----- /papers/search 로직 호출 (요약 있으면 사용) -----
             history = await _get_chat_history_async(chat_id)
@@ -396,6 +413,7 @@ async def _process_chat_request(body: dict) -> None:
             else:
                 titles = [x.get("title") for x in results if x.get("title")]
                 answer_text = "검색 결과:\n- " + "\n- ".join(titles)
+
 
         else:
             raise ValueError(f"Unsupported questionType: {qtype}")
@@ -445,6 +463,7 @@ async def api_chat_unified():
     qtype = body.get("questionType", body.get("qeustionType"))
     question = body.get("question")
     chat_id = body.get("chatId")
+    session_id = body.get("sessionId")
 
     # 기본 검증
     if qtype is None or question is None or chat_id is None:
@@ -948,8 +967,6 @@ def search_papers():
     if summarize and results:
         # responder = R
 
-        print("check Results" , results)
-        print("check query", query)
         response["summary"] = Responder.run_paper(query, json.dumps(results))
     return jsonify(response)
 
