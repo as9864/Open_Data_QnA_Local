@@ -117,7 +117,7 @@ CHAT_MODEL = config.get("CONFIG","CHAT_MODEL" , fallback="timHan/llama3korean8B4
 
 CHAT_MODEL_URL = config.get("CONFIG","CHAT_MODEL_URL" , fallback="http://222.236.26.27:25123")
 
-
+LOCAL_AUTH_TOKEN = config.get("LOCAL", "LOCAL_AUTH_TOKEN", fallback="")
 
 
 
@@ -158,4 +158,5 @@ __all__ = [
     "CALL_BACK_URL",
     "CHAT_MODEL",
     "CHAT_MODEL_URL",
+    "LOCAL_AUTH_TOKEN",
 ]

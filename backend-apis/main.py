@@ -52,7 +52,7 @@ import json
 import logging as log
 import requests
 
-from utilities import CALL_BACK_URL , CHAT_MODEL, CHAT_MODEL_URL
+from utilities import CALL_BACK_URL , CHAT_MODEL, CHAT_MODEL_URL , LOCAL_AUTH_TOKEN
 
 
 
@@ -235,7 +235,6 @@ def validate_session(session_id: str) -> tuple[str, bool]:
     return session_id, new_session
 
 
-LOCAL_AUTH_TOKEN = os.environ.get("LOCAL_AUTH_TOKEN")
 
 
 def _authorization_token(header: Optional[str]) -> Optional[str]:
@@ -294,6 +293,7 @@ cors = CORS(app, resources={r"/*": {"origins": "*"}})
 #   Body: { "answer": str, "chat_status": "DONE" | "FAIL" }
 # ------------------------------------------------------------
 @app.route("/api/chat", methods=["POST"])
+@jwt_authenticated
 async def api_chat_unified():
     try:
         body = request.get_json(silent=True) or {}
