@@ -8,6 +8,7 @@ import asyncio
 
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
 from services import chat
+from utilities import CHAT_MODEL
 
 
 def test_generate_sql_results_returns_dataframe(monkeypatch):
@@ -33,3 +34,9 @@ def test_generate_sql_results_handles_non_dataframe(monkeypatch):
     sql, df, resp = asyncio.run(chat.generate_sql_results("sess", "schema", "question"))
     assert df.empty
     assert list(df.columns) == []
+
+
+def test_default_pipeline_uses_local_chat_model():
+    assert chat._DEFAULT_PIPELINE_ARGS["SQLBuilder_model"] == CHAT_MODEL
+    assert chat._DEFAULT_PIPELINE_ARGS["SQLChecker_model"] == CHAT_MODEL
+    assert chat._DEFAULT_PIPELINE_ARGS["SQLDebugger_model"] == CHAT_MODEL
