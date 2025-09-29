@@ -292,11 +292,8 @@ cors = CORS(app, resources={r"/*": {"origins": "*"}})
 #   POST {CALLBACK_BASE_URL}/api/chat/callback/{chatId}
 #   Body: { "answer": str, "chat_status": "DONE" | "FAIL" }
 # ------------------------------------------------------------
-@app.route("/api/chat", methods=["POST"])
-@jwt_authenticated
-async def api_chat_unified():
+async def _process_chat_request(body: dict) -> None:
     try:
-        body = request.get_json(silent=True) or {}
         # 오타 대비(qeustionType)도 함께 허용
         qtype = body.get("questionType", body.get("qeustionType"))
         question = body.get("question")
@@ -307,17 +304,7 @@ async def api_chat_unified():
         top_k = body.get("top_k", 5) # top_k 5개 고정
         summarize = bool(body.get("summarize", True))
 
-        # 기본 검증
-        if qtype is None or question is None or chat_id is None:
-            return jsonify({"Error": "questionType, question, chatId are required"}), 400
-
-        try:
-            qtype = int(qtype)
-        except Exception:
-            return jsonify({"Error": "questionType must be int"}), 400
-
         answer_text = ""
-        status = "DONE"
 
         session_id: Optional[str] = None
         if chat_id:
@@ -388,26 +375,51 @@ async def api_chat_unified():
                 answer_text = "검색 결과:\n- " + "\n- ".join(titles)
 
         else:
-            return jsonify({"Error": f"Unsupported questionType: {qtype}"}), 400
+            raise ValueError(f"Unsupported questionType: {qtype}")
 
         _remember_exchange(chat_id, qtype, question, answer_text, session_id)
 
         # ---- 콜백 전송 ----
         _post_callback(chat_id, answer_text, status="DONE")
 
-        # 클라이언트에는 간단 응답
-        return jsonify({"chatId": chat_id, "chat_status": "DONE"}), 202
-
     except Exception as e:
         log.exception("api_chat_unified failed")
         # 실패 콜백 전송(가능하면 chatId 포함)
         try:
-            chat_id = (request.get_json(silent=True) or {}).get("chatId")
+            chat_id = (body or {}).get("chatId")
             if chat_id:
                 _post_callback(chat_id, f"에러: {e}", status="FAIL")
         except Exception:
             pass
-        return jsonify({"Error": str(e)}), 500
+
+
+@app.route("/api/chat", methods=["POST"])
+@jwt_authenticated
+async def api_chat_unified():
+    body = request.get_json(silent=True) or {}
+
+    # 오타 대비(qeustionType)도 함께 허용
+    qtype = body.get("questionType", body.get("qeustionType"))
+    question = body.get("question")
+    chat_id = body.get("chatId")
+
+    # 기본 검증
+    if qtype is None or question is None or chat_id is None:
+        return jsonify({"Error": "questionType, question, chatId are required"}), 400
+
+    try:
+        qtype = int(qtype)
+    except Exception:
+        return jsonify({"Error": "questionType must be int"}), 400
+
+    if qtype not in {1, 2, 3}:
+        return jsonify({"Error": f"Unsupported questionType: {qtype}"}), 400
+
+    body["questionType"] = qtype
+
+    asyncio.create_task(_process_chat_request(body))
+
+    return jsonify({"chatId": chat_id, "chat_status": "PENDING"}), 202
 
 
 
