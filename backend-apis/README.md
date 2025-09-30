@@ -1,407 +1,360 @@
+# Backend API service
 
+This directory contains the Flask application that powers the Open Data QnA Local
+backend. The service can be run entirely on a workstation or server that you
+control – no Google Cloud resources are required.
 
+## Prerequisites
 
+1. Follow the [repository quick start](../README.md#quick-start) to create a
+   Python environment, install dependencies, and configure `config.ini` with
+   your database connection details.
+2. (Optional) Set environment variables before launching the server:
+   - `PORT` – override the default port (`8080`).
+   - `CHAT_HISTORY_LIMIT` – limit the number of cached chat turns (default `20`).
+   - `LOCAL_AUTH_TOKEN` – if set in `config.ini`, clients must send an
+     `Authorization: Bearer <token>` header to access protected routes.
 
-<h3 style="text-align:center;"> Create Endpoints </h3>
+### Configuration
 
-   Here we are going to create publicly accessible endpoints (no authentication) .
+The service reads [`config.ini`](../config.ini) at startup. Update the `LOCAL`
+section with connection strings for your PostgreSQL instance (or SQLite file) and
+any agent/model overrides. The same configuration file is used across the
+project, so edits remain consistent with the quick-start guide.
 
-   If you're working on a managed GCP project, it is common that there would be Domain Restricted Sharing Org Policies that will not allow the creation of a public facing endpoint.
+## Running the Flask app locally
 
-   So we can allow all the domains and re-enable the same policy so that we don’t change the existing policy.
+Launch the API server from the project root:
 
-   Please run the below command before proceeding ahead. You need to have Organization Policy Admin rights to run the below commands.
-```
-export PROJECT_ID=<PROJECT_ID>
-```
-
-```
-cd Open_Data_QnA/backend-apis
-
-gcloud resource-manager org-policies set-policy --project=$PROJECT_ID policy.yaml #This command will create policy that overrides to allow all domain
-
-```
-
-Create the service account and add roles to run the solution backend for the APIs
-
-```
-gcloud iam service-accounts create opendataqna --project=$PROJECT_ID
-gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:opendataqna@$PROJECT_ID.iam.gserviceaccount.com --role='roles/cloudsql.client' --project=$PROJECT_ID --quiet
-gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:opendataqna@$PROJECT_ID.iam.gserviceaccount.com --role='roles/bigquery.admin' --project=$PROJECT_ID --quiet
-gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:opendataqna@$PROJECT_ID.iam.gserviceaccount.com --role='roles/aiplatform.user' --project=$PROJECT_ID --quiet
-gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:opendataqna@$PROJECT_ID.iam.gserviceaccount.com --role='roles/datastore.owner' --project=$PROJECT_ID --quiet
-
+```bash
+python backend-apis/main.py
 ```
 
+By default the app listens on `http://0.0.0.0:8080`. Use `PORT=<value>` to run on
+another port. Logs will indicate whether an authorization token is required.
 
+## API reference
 
-**Technologies**
+All endpoints accept and return JSON unless noted otherwise. URLs below assume a
+local server on `http://localhost:8080`.
 
-* **Programming language:** Python
-* **Framework:** Flask
+> **Auth note:** Routes decorated with `@jwt_authenticated` require the
+> `Authorization` header only when `LOCAL_AUTH_TOKEN` is configured.
 
-**Before you start :** Ensure all variables in your config.ini file are correct, especially those for your Postgres instance and BigQuery dataset. If you need to change the Postgres instance or BigQuery dataset values, update the config.ini file before proceeding.   
+### `POST /api/chat`
 
+Queue an asynchronous chat job handled by the background worker.
 
-   The endpoints deployed here are completely customized for the UI built in this demo solution. Feel free to customize the endpoint if needed for different UI/frontend. The gcloud run deploy command create a cloud build that uses the Dockerfile in the OpenDataQnA folder
-    
-  ***Deploy endpoints to Cloud Run***
-
-```
-export PROJECT_ID=<Enter your Project ID>
- ```
- ```
-export SERVICE_NAME=opendataqna #change the name if needed 
-export DEPLOY_REGION=us-central1 #change the cloud run deployment region if needed 
-```
-
-Enable the cloud build API to deploy the endpoints
-```
-gcloud services enable cloudbuild.googleapis.com --project $PROJECT_ID
+**Request**
+```json
+{
+  "questionType": 1,
+  "question": "Show total encounters by month",
+  "chatId": "demo-chat-1",
+  "sessionId": "optional-existing-session"
+}
 ```
 
-Get default service account for compute engine and cloud build to deploy the cloud run and add IAM Roles for deployment
-```
-export PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format="value(projectNumber)")
-
-export DEFAULT_CE_SA=$(gcloud iam service-accounts list --project=$PROJECT_ID --format="value(EMAIL)" --filter="EMAIL ~ $PROJECT_NUMBER-compute@developer.gserviceaccount.com")
-
-gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:$DEFAULT_CE_SA --role='roles/storage.admin' --project=$PROJECT_ID --quiet
-
-gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:$DEFAULT_CE_SA --role='roles/artifactregistry.admin' --project=$PROJECT_ID --quiet
-
-gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:$DEFAULT_CE_SA --role='roles/firebase.admin' --project=$PROJECT_ID --quiet
-
-gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:$DEFAULT_CE_SA --role='roles/cloudbuild.builds.builder' --project=$PROJECT_ID --quiet
-
-gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:$DEFAULT_CE_SA --role='roles/logging.logWriter' --project=$PROJECT_ID --quiet
-
-
-export DEFAULT_CB_SA=$PROJECT_NUMBER'@cloudbuild.gserviceaccount.com'
-
-gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:$DEFAULT_CB_SA --role='roles/firebase.admin' --project=$PROJECT_ID --quiet
-
-gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:$DEFAULT_CB_SA --role='roles/serviceusage.apiKeysAdmin' --project=$PROJECT_ID --quiet
-
-gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:$DEFAULT_CB_SA --role='roles/cloudbuild.builds.builder' --project=$PROJECT_ID --quiet
-
-gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:$DEFAULT_CB_SA --role='roles/artifactregistry.admin' --project=$PROJECT_ID --quiet
-
+**Response** – HTTP 202
+```json
+{
+  "chatId": "demo-chat-1",
+  "chat_status": "PENDING"
+}
 ```
 
-```
- cd Open_Data_QnA
+### `GET /available_databases`
 
- gcloud beta run deploy $SERVICE_NAME --region $DEPLOY_REGION --source . --service-account=opendataqna@$PROJECT_ID.iam.gserviceaccount.com --service-min-instances=1  --allow-unauthenticated --project=$PROJECT_ID 
- 
- #if you are deploying cloud run application for the first time in the project you will be prompted for a couple of settings. Go ahead and type Yes.
+Return the databases configured for SQL generation.
 
-
-```
-
-   Once the deployment is done successfully you should be able to see the Service URL (endpoint point) link as shown below. Please keep this handy to add this in the frontend or you can get this uri from the cloud run page in the GCP Console. e.g. *https://OpenDataQnA-aeiouAEI-uc.a.run.app*
-
-   Test if the endpoints are working with below command. This should return the dataset your created in the source env setup notebook.
-```
- curl <URI of the end point>/available_databases
-
+**Response**
+```json
+{
+  "ResponseCode": 200,
+  "KnownDB": [
+    {"table_schema": "imdb"},
+    {"table_schema": "retail"}
+  ],
+  "Error": ""
+}
 ```
 
+### `POST /embed_sql`
 
+Persist a manually reviewed SQL query into the Known Good Query store.
 
-<p align="center">
-    <a href="../utilities/imgs/Cloud Run Deploy.png">
-        <img src="../utilities/imgs/Cloud Run Deploy.png" alt="aaie image">
-    </a>
-</p>
-
-
-  Delete the Org Policy on the Project that's created above. Do not run this if you haven’t created the org policy above
-
+**Request**
+```json
+{
+  "session_id": "123e4567",
+  "user_grouping": "retail",
+  "user_question": "Which city had the most sales?",
+  "generated_sql": "SELECT city_id, COUNT(*) FROM retail.sales GROUP BY 1"
+}
 ```
-gcloud resource-manager org-policies delete iam.allowedPolicyMemberDomains --project=$PROJECT_ID
+
+**Response** – HTTP 201
+```json
+{
+  "ResponseCode": 201,
+  "Message": "Example SQL has been accepted for embedding",
+  "SessionID": "123e4567",
+  "Error": ""
+}
 ```
 
+### `POST /run_query`
 
+Execute provided SQL against the configured database.
 
-**API Details**
+**Request**
+```json
+{
+  "session_id": "123e4567",
+  "user_grouping": "retail",
+  "user_question": "Which city had the most sales?",
+  "generated_sql": "SELECT city_id, COUNT(*) AS total_sales FROM retail.sales GROUP BY 1"
+}
+```
 
-   All the payloads are in JSON format
+**Response**
+```json
+{
+  "ResponseCode": 200,
+  "KnownDB": "[{\"city_id\": \"C014\", \"total_sales\": 152}]",
+  "NaturalResponse": "City C014 recorded the highest number of sales.",
+  "SessionID": "123e4567",
+  "Error": ""
+}
+```
 
-1. List Databases : Get the available databases in the vector store that solution can run against
+### `POST /chat`
 
-    URI: {Service URL}/available_databases 
-    Complete URL Sample : https://OpenDataQnA-aeiouAEI-uc.a.run.app/available_databases
+Run the full chat flow synchronously: generate SQL, execute it, and return a
+natural-language answer.
 
-    Method: GET
+**Request**
+```json
+{
+  "session_id": "",
+  "user_grouping": "retail",
+  "user_question": "Which city had the most sales?"
+}
+```
 
-    Request Payload : NONE
+**Response**
+```json
+{
+  "session_id": "123e4567",
+  "sql": "SELECT city_id, COUNT(*) AS total_sales FROM retail.sales GROUP BY 1",
+  "results": "[{\"city_id\": \"C014\", \"total_sales\": 152}]",
+  "response": "City C014 recorded the highest number of sales.",
+  "session_reset": true
+}
+```
 
-    Request response:
-    ```
-    {
-    "Error": "",
-    "KnownDB": "[{\"table_schema\":\"imdb-postgres\"},{\"table_schema\":\"retail-postgres\"}]",
-    "ResponseCode": 200
-    }
-    ```
+### `POST /omop/concept_chat`
 
-2. Known SQL : Get suggestive questions (previously asked/examples added) for selected database
+Retrieve OMOP CDM vocabulary information for a code or concept term.
 
-    URI: /get_known_sql
-    Complete URL Sample : https://OpenDataQnA-aeiouAEI-uc.a.run.app/get_known_sql   
+**Request**
+```json
+{
+  "question": "What concept represents ICD10 code E11?",
+  "top_k": 5
+}
+```
 
-    Method: POST
+**Response**
+```json
+{
+  "answer": "...model generated OMOP concept summary..."
+}
+```
 
-    Request Payload :
+### `POST /get_known_sql`
 
-    ```
-    {
-    "user_grouping":"retail"
-    }
-    ```
+Fetch Known Good Queries for the supplied user grouping.
 
-    Request response:
+**Request**
+```json
+{
+  "user_grouping": "retail"
+}
+```
 
-    ```
-    {
-    "Error": "",
-    "KnownSQL": "[{\"example_user_question\":\"Which city had maximum number of sales and what was the count?\",\"example_generated_sql\":\"select st.city_id, count(st.city_id) as city_sales_count from retail.sales as s join retail.stores as st on s.id_store = st.id_store group by st.city_id order by city_sales_count desc limit 1;\"}]",
-    "ResponseCode": 200
-    }
-    ```
+**Response**
+```json
+{
+  "ResponseCode": 200,
+  "KnownSQL": "[{\"example_user_question\": \"Which city had the most sales?\", ...}]",
+  "Error": ""
+}
+```
 
+### `POST /generate_sql`
 
-3. SQL Generation : Generate the SQL for the input question asked against a database
+Generate SQL for a user question without executing it.
 
-    URI: /generate_sql
+**Request**
+```json
+{
+  "session_id": "",
+  "user_grouping": "retail",
+  "user_question": "Which city had the most sales?",
+  "user_id": "analyst@example.com"
+}
+```
 
+**Response**
+```json
+{
+  "ResponseCode": 200,
+  "GeneratedSQL": "SELECT city_id, COUNT(*) AS total_sales FROM retail.sales GROUP BY 1",
+  "SessionID": "123e4567",
+  "Error": ""
+}
+```
 
-    Method: POST
+### `POST /generate_viz`
 
-    Complete URL Sample : https://OpenDataQnA-aeiouAEI-uc.a.run.app/get_known_sql
+Produce Google Charts JavaScript based on SQL results.
 
+**Request**
+```json
+{
+  "session_id": "123e4567",
+  "user_question": "Top 5 product SKUs by orders",
+  "generated_sql": "SELECT product_sku, SUM(total_ordered) FROM retail.sales GROUP BY 1",
+  "sql_results": [
+    {"product_sku": "SKU-001", "total_ordered": 456}
+  ]
+}
+```
 
-    Request payload:
+**Response**
+```json
+{
+  "ResponseCode": 200,
+  "GeneratedChartjs": {
+    "chart_div": "google.charts.load('current', {packages: ['corechart']});..."
+  },
+  "SessionID": "123e4567",
+  "Error": ""
+}
+```
 
-    ```
-    {
-    "session_id":"",
-    "user_id":"harry@hogwarts.com",
-    "user_question":"Which city had maximum number of sales?",
-    "user_grouping":"retail"
-    }
-    ```
+### `POST /summarize_results`
 
+Summarize a result set for a given question.
 
-    Request response:
-    ```
-    {
-    "Error": "",
-    "GeneratedSQL": " select st.city_id from retail.sales as s join retail.stores as st on s.id_store = st.id_store group by st.city_id order by count(*) desc limit 1;",
-    "ResponseCode": 200,
-    "SessionID":"1iuu2u-k1ij2-kkkhhj12131"
-    }
-    ```
+**Request**
+```json
+{
+  "user_question": "Which city had the most sales?",
+  "sql_results": "[{\"city_id\": \"C014\", \"total_sales\": 152}]"
+}
+```
 
+**Response**
+```json
+{
+  "ResponseCode": 200,
+  "summary_response": "City C014 recorded the highest number of sales.",
+  "Error": ""
+}
+```
 
-4. Execute SQL : Run the SQL statement against provided database source
+### `POST /natural_response`
 
-    URI:/run_query
-    Complete URL Sample : https://OpenDataQnA-aeiouAEI-uc.a.run.app/run_query
+Combine SQL generation, execution, and summarization to return an answer only.
 
-    Method: POST
+**Request**
+```json
+{
+  "user_grouping": "retail",
+  "user_question": "Which city had the most sales?"
+}
+```
 
-    Request payload:
-    ```
-    { "user_grouping": "retail",
-    "generated_sql":"select st.city_id from retail.sales as s join retail.stores as st on s.id_store = st.id_store group by st.city_id order by count(*) desc limit 1;",
-    "session_id":"1iuu2u-k1ij2-kkkhhj12131"
-    }
-    ```
+**Response**
+```json
+{
+  "ResponseCode": 200,
+  "summary_response": "City C014 recorded the highest number of sales.",
+  "Error": ""
+}
+```
 
-    Request response:
-    ```
-    {
-    "SessionID":"1iuu2u-k1ij2-kkkhhj12131",
-    "Error": "",
-    "KnownDB": "[{\"city_id\":\"C014\"}]",
-    "ResponseCode": 200
-    }
-    ```
-5. Embedd SQL : To embed known good SQLs to your example embeddings
+### `POST /get_results`
 
-    URI:/embed_sql
-    Complete URL Sample : https://OpenDataQnA-aeiouAEI-uc.a.run.app/embed_sql
+Generate and execute SQL, returning the raw result rows.
 
-    METHOD: POST
+**Request**
+```json
+{
+  "user_database": "retail",
+  "user_question": "Which city had the most sales?"
+}
+```
 
-    Request Payload:
+**Response**
+```json
+{
+  "ResponseCode": 200,
+  "GeneratedResults": "[{\"city_id\": \"C014\", \"total_sales\": 152}]",
+  "Error": ""
+}
+```
 
-    ```
-    {
-      "session_id":"1iuu2u-k1ij2-kkkhhj12131",
-    "user_question":"Which city had maximum number of sales?",
-    "generated_sql":"select st.city_id from retail.sales as s join retail.stores as st on s.id_store = st.id_store group by st.city_id order by count(*) desc limit 1;",
-    "user_grouping":"retail"
-    }
-    ```
+### `POST /papers/embed`
 
-    Request response:
-    ```
-    {
-    "ResponseCode" : 201, 
-    "Message" : "Example SQL has been accepted for embedding",
-    "Error":"",
-    "SessionID":"1iuu2u-k1ij2-kkkhhj12131"
-    }
-    ```
-6. Generate Visualization Code : To generated javascript Google Charts code based on the SQL Results and display them on the UI
+Store paper documents and their embeddings in PostgreSQL.
 
-    As per design we have two visualizations suggested showing up when the user clicks the visualize button. Hence two divs are send as part of the response “chart_div”, “chart_div_1” to bind them to that element in the UI
-        
+**Request**
+```json
+[
+  {
+    "title": "Example title",
+    "abstract": "Optional abstract",
+    "content": "Full document text",
+    "metadata": {"source": "demo"}
+  }
+]
+```
 
-    If you are only looking to setup enpoint you can stop here. In case you require the demo app (frontend UI) built in the solution, proceed to the next step.
+**Response** – HTTP 201
+```json
+{
+  "inserted": 1
+}
+```
 
-    URI:/generate_viz
-    Complete URL Sample : https://OpenDataQnA-aeiouAEI-uc.a.run.app/generate_viz
-    
-    METHOD: POST
+### `POST /papers/search`
 
-    Request Payload:
-    ```
-      {
-      "session_id":"1iuu2u-k1ij2-kkkhhj12131" ,
-      "user_question": "What are top 5 product skus that are ordered?",
-      "sql_generated": "SELECT productSKU as ProductSKUCode, sum(total_ordered) as TotalOrderedItems FROM `inbq1-joonix.demo.sales_sku` group by productSKU order by sum(total_ordered) desc limit 5",
-      "sql_results": [
-        {
-          "ProductSKUCode": "GGOEGOAQ012899",
-          "TotalOrderedItems": 456
-        },
-        {
-          "ProductSKUCode": "GGOEGDHC074099",
-          "TotalOrderedItems": 334
-        },
-        {
-          "ProductSKUCode": "GGOEGOCB017499",
-          "TotalOrderedItems": 319
-        },
-        {
-          "ProductSKUCode": "GGOEGOCC077999",
-          "TotalOrderedItems": 290
-        },
-        {
-          "ProductSKUCode": "GGOEGFYQ016599",
-          "TotalOrderedItems": 253
-        }
-      ]
-    }
-    
-    ```
+Perform a vector similarity search over embedded papers.
 
-    Request response:
-    ```
-    {
-    "SessionID":"1iuu2u-k1ij2-kkkhhj12131",
-    "Error": "",
-    "GeneratedChartjs": {
-        "chart_div": "google.charts.load('current', {\n  packages: ['corechart']\n});\ngoogle.charts.setOnLoadCallback(drawChart);\n\nfunction drawChart() {\n  var data = google.visualization.arrayToDataTable([\n    ['Product SKU', 'Total Ordered Items'],\n    ['GGOEGOAQ012899', 456],\n    ['GGOEGDHC074099', 334],\n    ['GGOEGOCB017499', 319],\n    ['GGOEGOCC077999', 290],\n    ['GGOEGFYQ016599', 253],\n  ]);\n\n  var options = {\n    title: 'Top 5 Product SKUs Ordered',\n    width: 600,\n    height: 300,\n    hAxis: {\n      textStyle: {\n        fontSize: 12\n      }\n    },\n    vAxis: {\n      textStyle: {\n        fontSize: 12\n      }\n    },\n    legend: {\n      textStyle: {\n        fontSize: 12\n      }\n    },\n    bar: {\n      groupWidth: '50%'\n    }\n  };\n\n  var chart = new google.visualization.BarChart(document.getElementById('chart_div'));\n\n  chart.draw(data, options);\n}\n",
-        
-        "chart_div_1": "google.charts.load('current', {'packages':['corechart']});\ngoogle.charts.setOnLoadCallback(drawChart);\nfunction drawChart() {\n  var data = google.visualization.arrayToDataTable([\n    ['ProductSKUCode', 'TotalOrderedItems'],\n    ['GGOEGOAQ012899', 456],\n    ['GGOEGDHC074099', 334],\n    ['GGOEGOCB017499', 319],\n    ['GGOEGOCC077999', 290],\n    ['GGOEGFYQ016599', 253]\n  ]);\n\n  var options = {\n    title: 'Top 5 Product SKUs that are Ordered',\n    width: 600,\n    height: 300,\n    hAxis: {\n      textStyle: {\n        fontSize: 5\n      }\n    },\n    vAxis: {\n      textStyle: {\n        fontSize: 5\n      }\n    },\n    legend: {\n      textStyle: {\n        fontSize: 10\n      }\n    },\n    bar: {\n      groupWidth: \"60%\"\n    }\n  };\n\n  var chart = new google.visualization.ColumnChart(document.getElementById('chart_div_1'));\n\n  chart.draw(data, options);\n}\n"
-    },
-    "ResponseCode": 200
-    }
+**Request**
+```json
+{
+  "query": "climate change",
+  "k": 5,
+  "summarize": true
+}
+```
 
-    ```
-7. Get Results : To directly get the sql results in JSON format
+**Response**
+```json
+{
+  "results": [
+    {"id": 1, "title": "Example title", "abstract": "Optional abstract", "metadata": {"source": "demo"}}
+  ],
+  "summary": "Optional natural language summary"
+}
+```
 
-    URI:/get_results
-    Complete URL Sample : https://OpenDataQnA-aeiouAEI-uc.a.run.app/embed_sql
+## Next steps
 
-    METHOD: POST
-
-    Request Payload:
-
-    ```
-    {
-    "user_question":"Which city had maximum number of sales?",
-    "user_database":"retail"
-    }
-    ```
-
-    Request response:
-    ```
-    {
-    "Error": "",
-    "GeneratedResults": "[{\"city_id\":\"C014\"}]",
-    "ResponseCode": 200
-    }
-    ```
-
-8. Embed Papers : Store paper documents and their embeddings
-
-    URI: /papers/embed
-    Method: POST
-
-    Request Payload:
-    ```
-    [
-      {
-        "title": "Example title",
-        "abstract": "Optional abstract",
-        "content": "Full document text",
-        "metadata": {"source": "demo"}
-      }
-    ]
-    ```
-
-    Request response:
-    ```
-    {
-    "inserted": 1
-    }
-    ```
-
-9. Search Papers : Find similar papers using vector search
-
-    URI: /papers/search
-    Method: POST
-
-    Request Payload:
-    ```
-    {
-    "query": "climate change",
-    "k": 5,
-    "summarize": true
-    }
-    ```
-
-    Request response:
-    ```
-    {
-    "results": [{"id": 1, "title": "Example title", "abstract": "Optional abstract", "metadata": {"source": "demo"}}],
-    "summary": "Optional natural language summary"
-    }
-    ```
-
-10. OMOP Concept Chat : Retrieve OMOP CDM vocabulary details for a concept code or term
-
-    URI: /omop/concept_chat
-    Method: POST
-
-    Request Payload:
-    ```
-    {
-      "question": "What concept represents ICD10 code E11?"
-    }
-    ```
-
-    Request response:
-    ```
-    {
-      "answer": "...model generated OMOP concept summary..."
-    }
-    ```
-
-### For setting up the demo UI with these endpoints please refer to README.md under [`/frontend`](/frontend/)
+To integrate these endpoints with the demo UI or other clients, continue using
+the configuration established in the repository quick start. The backend README
+and the root guide now describe the same local workflow.
