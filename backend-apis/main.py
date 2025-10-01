@@ -464,6 +464,12 @@ async def api_chat_unified():
     question = body.get("question")
     chat_id = body.get("chatId")
     session_id = body.get("sessionId")
+    if "session_id" not in body and session_id is not None:
+        body["session_id"] = session_id
+    elif "session_id" in body:
+        session_id = body["session_id"]
+    else:
+        body["session_id"] = None
 
     # 기본 검증
     if qtype is None or question is None or chat_id is None:
@@ -479,9 +485,20 @@ async def api_chat_unified():
 
     body["questionType"] = qtype
 
+    resolved_session_id = None
+    if chat_id:
+        resolved_session_id, _ = _resolve_chat_session(chat_id, body.get("session_id"))
+        body["session_id"] = resolved_session_id
+
     enqueue_chat_task(body)
 
-    return jsonify({"chatId": chat_id, "chat_status": "PENDING"}), 202
+    response_payload = {
+        "chatId": chat_id,
+        "sessionId": resolved_session_id,
+        "chat_status": "PENDING",
+    }
+
+    return jsonify(response_payload), 202
 
 
 
