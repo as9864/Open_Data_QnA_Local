@@ -224,12 +224,32 @@ class BQConnector(DBConnector, ABC):
                                             OPTIONS (ENDPOINT = '{embedding_model}');''')
    
     
-    def retrieve_matches(self, mode, user_grouping, qe, similarity_threshold, limit): 
+    @staticmethod
+    def _extract_query_vector(qe):
+        if isinstance(qe, dict):
+            qe = qe.get("embedding")
+        elif isinstance(qe, (list, tuple)) and len(qe) == 2 and isinstance(qe[1], str):
+            qe = qe[0]
+
+        if isinstance(qe, (list, tuple)) and qe and isinstance(qe[0], (list, tuple)):
+            qe = qe[0]
+
+        return qe
+
+    def retrieve_matches(self, mode, user_grouping, qe, similarity_threshold, limit):
         """
         This function retrieves the most similar table_schema and column_schema.
-        Modes can be either 'table', 'column', or 'example' 
+        Modes can be either 'table', 'column', or 'example'
         """
         matches = []
+
+        qe_vector = self._extract_query_vector(qe)
+        if qe_vector is None:
+            return []
+        if isinstance(qe_vector, (list, tuple)):
+            qe_expr = "[" + ", ".join(str(v) for v in qe_vector) + "]"
+        else:
+            qe_expr = str(qe_vector)
 
         if mode == 'table':
             sql = '''select base.content as tables_content from vector_search(
@@ -250,7 +270,7 @@ class BQConnector(DBConnector, ABC):
             ValueError("No valid mode. Must be either table, column, or example")
             name_txt = ''
 
-        results=self.client.query_and_wait(sql.format('{}.{}'.format(self.project_id,self.opendataqna_dataset),user_grouping,qe,limit,similarity_threshold)).to_dataframe()
+        results=self.client.query_and_wait(sql.format('{}.{}'.format(self.project_id,self.opendataqna_dataset),user_grouping,qe_expr,limit,similarity_threshold)).to_dataframe()
         # CHECK RESULTS 
         if len(results) == 0:
             print(f"Did not find any results for {mode}. Adjust the query parameters.")

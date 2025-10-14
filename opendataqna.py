@@ -228,6 +228,7 @@ async def generate_sql(session_id,
         AUDIT_TEXT = 'Creating embedding for given question'
         # Fetch the embedding of the user's input question 
         embedded_question = await asyncio.to_thread(embedder.create, re_written_qe)
+        query_bundle = {"embedding": embedded_question, "query": re_written_qe}
 
         
 
@@ -263,7 +264,7 @@ async def generate_sql(session_id,
                 similar_sql = await vector_connector.getSimilarMatches(
                     'example',
                     user_grouping,
-                    embedded_question,
+                    query_bundle,
                     num_sql_matches,
                     example_similarity_threshold,
                 )
@@ -279,14 +280,14 @@ async def generate_sql(session_id,
             table_matches = await vector_connector.getSimilarMatches(
                 'table',
                 user_grouping,
-                embedded_question,
+                query_bundle,
                 num_table_matches,
                 table_similarity_threshold,
             )
             column_matches = await vector_connector.getSimilarMatches(
                 'column',
                 user_grouping,
-                embedded_question,
+                query_bundle,
                 num_column_matches,
                 column_similarity_threshold,
             )

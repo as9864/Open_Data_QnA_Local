@@ -37,6 +37,7 @@ firebase-admin = "^5.2.0"
 sentence-transformers = "^2.6.1"
 # ✅ CPU 전용 torch 고정 (필요 버전으로 맞추세요)
 torch = {version = "^2.4", source = "pytorch-cpu"}
+rank-bm25 = "^0.2.2"
 
 
 
