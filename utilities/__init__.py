@@ -119,9 +119,47 @@ LOCAL_USER_GROUPING =  config.get("LOCAL", "user_grouping", fallback="cdm")
 
 CALL_BACK_URL = config.get("CONFIG","CALL_BACK_URL" , fallback="http://caus.re.kr:3010")
 
-CHAT_MODEL = config.get("CONFIG","CHAT_MODEL" , fallback="timHan/llama3korean8B4QKM:latest")
+CHAT_MODEL = config.get("CONFIG", "CHAT_MODEL", fallback="timHan/llama3korean8B4QKM:latest")
 
-CHAT_MODEL_URL = config.get("CONFIG","CHAT_MODEL_URL" , fallback="http://222.236.26.27:25123")
+CHAT_MODEL_URL = config.get(
+    "CONFIG", "CHAT_MODEL_URL", fallback="http://222.236.26.27:25123"
+)
+
+_response_draft_model = config.get("CONFIG", "RESPONSE_DRAFT_MODEL", fallback="").strip()
+RESPONSE_DRAFT_MODEL = _response_draft_model or CHAT_MODEL
+
+_response_draft_url = config.get("CONFIG", "RESPONSE_DRAFT_MODEL_URL", fallback="").strip()
+RESPONSE_DRAFT_MODEL_URL = _response_draft_url or CHAT_MODEL_URL
+
+_response_editor_model = config.get("CONFIG", "RESPONSE_EDITOR_MODEL", fallback="").strip()
+RESPONSE_EDITOR_MODEL = _response_editor_model
+
+_response_editor_url = config.get("CONFIG", "RESPONSE_EDITOR_MODEL_URL", fallback="").strip()
+RESPONSE_EDITOR_MODEL_URL = _response_editor_url or RESPONSE_DRAFT_MODEL_URL
+
+_response_editor_temperature = config.get(
+    "CONFIG", "RESPONSE_EDITOR_TEMPERATURE", fallback=""
+).strip()
+try:
+    RESPONSE_EDITOR_TEMPERATURE = (
+        float(_response_editor_temperature)
+        if _response_editor_temperature
+        else 0.1
+    )
+except ValueError:
+    RESPONSE_EDITOR_TEMPERATURE = 0.1
+
+_response_editor_max_tokens = config.get(
+    "CONFIG", "RESPONSE_EDITOR_MAX_TOKENS", fallback=""
+).strip()
+try:
+    RESPONSE_EDITOR_MAX_TOKENS = (
+        int(_response_editor_max_tokens)
+        if _response_editor_max_tokens
+        else 512
+    )
+except ValueError:
+    RESPONSE_EDITOR_MAX_TOKENS = 512
 
 LOCAL_AUTH_TOKEN = config.get("LOCAL", "LOCAL_AUTH_TOKEN", fallback="")
 
@@ -171,6 +209,12 @@ __all__ = [
     "CALL_BACK_URL",
     "CHAT_MODEL",
     "CHAT_MODEL_URL",
+    "RESPONSE_DRAFT_MODEL",
+    "RESPONSE_DRAFT_MODEL_URL",
+    "RESPONSE_EDITOR_MODEL",
+    "RESPONSE_EDITOR_MODEL_URL",
+    "RESPONSE_EDITOR_TEMPERATURE",
+    "RESPONSE_EDITOR_MAX_TOKENS",
     "LOCAL_AUTH_TOKEN",
     "KNOWN_GOOD_SQL_PATH",
 ]

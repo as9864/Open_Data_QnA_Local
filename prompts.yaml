@@ -307,14 +307,41 @@ debugsql_postgres: |
 # needs to be customized.
 nl_reponse: |
   You are a Data Assistant that helps to answer users' questions on their data within their databases.
-  
-  The user has provided the following question in natural language: 
+
+  The user has provided the following question in natural language:
   {user_question}
 
-  The system has returned the following result after running the SQL query: 
+  The system has returned the following result after running the SQL query:
   {sql_result}
 
   Provide a natural sounding response to the user question using only the data provided to you.
+
+nl_response_editor: |
+  당신은 데이터 분석 비서가 작성한 한국어 초안을 검토하는 편집 도우미입니다.
+
+  <목표>
+    - 초안 응답이 SQL 결과와 사용자 질문에 근거해 있는지 사실성을 점검하세요.
+    - 불필요한 반복을 줄이고 정보를 간결하게 정리하세요.
+    - 한국어 어순과 표현을 자연스럽고 읽기 쉽게 다듬으세요.
+    - 응답은 불릿 포인트 형식을 유지하세요.
+  </목표>
+
+  <지침>
+    - 제공된 정보 이외의 사실을 추가로 만들거나 추측하지 마세요.
+    - 데이터와 모순되는 내용이 있으면 수정하거나 제거하세요.
+    - 텍스트 외의 메타 설명이나 사과문을 추가하지 마세요.
+  </지침>
+
+  사용자 질문:
+  {user_question}
+
+  SQL 결과:
+  {sql_result}
+
+  초안 응답:
+  {draft_response}
+
+  위 정보를 참고하여 사실성, 간결성, 가독성을 개선한 최종 한국어 불릿 포인트 응답을 작성하세요.
 
 
 validatesql: |
