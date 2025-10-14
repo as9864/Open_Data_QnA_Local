@@ -221,12 +221,27 @@ class PgConnector(DBConnector, ABC):
         await conn.close()
 
 
-    async def retrieve_matches(self, mode, user_groupinguping, qe, similarity_threshold, limit): 
+    @staticmethod
+    def _extract_query_vector(qe):
+        """Return just the embedding vector regardless of payload structure."""
+
+        if isinstance(qe, dict):
+            qe = qe.get("embedding")
+        elif isinstance(qe, (list, tuple)) and len(qe) == 2 and isinstance(qe[1], str):
+            qe = qe[0]
+
+        if isinstance(qe, (list, tuple)) and qe and isinstance(qe[0], (list, tuple)):
+            qe = qe[0]
+
+        return qe
+
+    async def retrieve_matches(self, mode, user_groupinguping, qe, similarity_threshold, limit):
         """
         This function retrieves the most similar table_schema and column_schema.
-        Modes can be either 'table', 'column', or 'example' 
+        Modes can be either 'table', 'column', or 'example'
         """
-        matches = [] 
+        matches = []
+        qe = self._extract_query_vector(qe)
 
         loop = asyncio.get_running_loop()
         async with Connector(loop=loop) as connector:

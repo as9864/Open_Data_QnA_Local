@@ -10,18 +10,24 @@ libraries so that the application can be executed completely offline.
 from __future__ import annotations
 
 from abc import ABC
+import asyncio
+import re
+import threading
+from datetime import datetime
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+
 import asyncpg
 from pgvector.asyncpg import register_vector
-import asyncio
-
 import pandas as pd
 from sqlalchemy import create_engine, text, bindparam
 from pgvector.sqlalchemy import Vector
 
 from .core import DBConnector
 
-from datetime import datetime
-from typing import Optional
+try:
+    from rank_bm25 import BM25Okapi
+except ImportError:  # pragma: no cover - optional dependency fallback
+    BM25Okapi = None
 
 
 def _load_known_good_sql_df() -> pd.DataFrame:
@@ -87,6 +93,15 @@ class LocalPgConnector(DBConnector, ABC):
         self.engine = create_engine(normalized_conn_str)
         if ensure_audit_table:
             self._ensure_audit_table()
+        self._fusion_candidate_k = 50
+        self._rerank_top_k = 5
+        self._rrf_k = 60
+        self._lexical_corpus_limit = 400
+        self._lexical_cache: Dict[Tuple[str, Optional[str]], List[Dict[str, Any]]] = {}
+        self._cross_encoder = None
+        self._cross_encoder_unavailable = False
+        self._cross_encoder_lock = threading.Lock()
+        self._token_pattern = re.compile(r"\w+")
 
     def getconn(self):
         """Return a new connection object."""
@@ -128,6 +143,352 @@ class LocalPgConnector(DBConnector, ABC):
             final_sql = None
 
         return final_sql
+
+    @staticmethod
+    def _split_query_payload(qe: Any) -> Tuple[Any, Optional[str]]:
+        """Return the embedding vector and original text from *qe* payloads."""
+
+        query_vector = qe
+        query_text: Optional[str] = None
+
+        if isinstance(qe, dict):
+            query_vector = qe.get("embedding")
+            text_value = qe.get("query")
+            if text_value is not None:
+                query_text = str(text_value)
+        elif isinstance(qe, (list, tuple)) and len(qe) == 2 and isinstance(qe[1], str):
+            query_vector, query_text = qe
+        if isinstance(query_vector, (list, tuple)) and query_vector and isinstance(query_vector[0], (list, tuple)):
+            query_vector = query_vector[0]
+
+        return query_vector, query_text
+
+    def _tokenize(self, text_value: str) -> List[str]:
+        if not text_value:
+            return []
+        return self._token_pattern.findall(text_value.lower())
+
+    def _load_lexical_corpus(
+        self,
+        mode: str,
+        user_grouping: str,
+        limit: int,
+        filter_by_grouping: bool,
+    ) -> List[Dict[str, Any]]:
+        cache_key = (mode, user_grouping if filter_by_grouping else None)
+        cached = self._lexical_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        fetch_limit = max(limit, self._lexical_corpus_limit)
+        corpus: List[Dict[str, Any]] = []
+
+        with self.getconn() as conn:
+            if mode == "table":
+                where_group = "WHERE user_grouping = :user_grouping" if filter_by_grouping else ""
+                sql = f"""
+                    SELECT content
+                    FROM table_details_embeddings
+                    {where_group}
+                    LIMIT :limit
+                """
+                params: Dict[str, Any] = {"limit": fetch_limit}
+                if filter_by_grouping:
+                    params["user_grouping"] = user_grouping
+            elif mode == "column":
+                where_group = "WHERE user_grouping = :user_grouping" if filter_by_grouping else ""
+                sql = f"""
+                    SELECT content
+                    FROM tablecolumn_details_embeddings
+                    {where_group}
+                    LIMIT :limit
+                """
+                params = {"limit": fetch_limit}
+                if filter_by_grouping:
+                    params["user_grouping"] = user_grouping
+            elif mode == "example":
+                sql = """
+                    SELECT example_user_question, example_generated_sql
+                    FROM example_prompt_sql_embeddings
+                    WHERE user_grouping = :user_grouping
+                    LIMIT :limit
+                """
+                params = {"user_grouping": user_grouping, "limit": fetch_limit}
+            else:
+                return []
+
+            rows = conn.execute(text(sql), params).mappings().all()
+
+        for row in rows:
+            if mode == "example":
+                question = str(row.get("example_user_question", "") or "")
+                sql_text = str(row.get("example_generated_sql", "") or "")
+                document = f"Example question: {question}\nExample SQL: {sql_text}"
+                content = f"\n Example_question: {question}; Example_SQL: {sql_text}"
+            else:
+                document = str(row.get("content", "") or "")
+                content = document
+
+            corpus.append(
+                {
+                    "content": content,
+                    "document": document,
+                    "tokens": self._tokenize(document),
+                }
+            )
+
+        self._lexical_cache[cache_key] = corpus
+        return corpus
+
+    def _lexical_search(
+        self,
+        mode: str,
+        user_grouping: str,
+        query_text: Optional[str],
+        limit: int,
+        filter_by_grouping: bool,
+    ) -> List[Dict[str, Any]]:
+        if not query_text or BM25Okapi is None:
+            return []
+
+        corpus = self._load_lexical_corpus(mode, user_grouping, limit, filter_by_grouping)
+        if not corpus:
+            return []
+
+        query_tokens = self._tokenize(query_text)
+        if not query_tokens:
+            return []
+
+        tokenized_corpus = [doc["tokens"] for doc in corpus]
+        if not any(tokenized_corpus):
+            return []
+
+        bm25 = BM25Okapi(tokenized_corpus)
+        scores = bm25.get_scores(query_tokens)
+
+        ranked_indices = sorted(range(len(scores)), key=lambda idx: scores[idx], reverse=True)
+        results: List[Dict[str, Any]] = []
+        for idx in ranked_indices[:limit]:
+            score = float(scores[idx])
+            if score <= 0:
+                continue
+            doc = corpus[idx]
+            results.append(
+                {
+                    "content": doc["content"],
+                    "document": doc["document"],
+                    "score": score,
+                    "source": "bm25",
+                }
+            )
+
+        return results
+
+    def _dense_similarity_search(
+        self,
+        mode: str,
+        user_grouping: str,
+        query_vector: Any,
+        similarity_threshold: float,
+        limit: int,
+        filter_by_grouping: bool,
+    ) -> List[Dict[str, Any]]:
+        if query_vector is None:
+            return []
+
+        if isinstance(query_vector, (list, tuple)) and query_vector and isinstance(query_vector[0], (list, tuple)):
+            query_vector = query_vector[0]
+
+        qe_vec = list(query_vector)
+        if not qe_vec:
+            return []
+
+        dim = len(qe_vec)
+
+        with self.getconn() as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+
+            if mode == "table":
+                where_group = "AND user_grouping = :user_grouping" if filter_by_grouping else ""
+                sql = f"""
+                    SELECT content AS tables_content,
+                           1 - (embedding <=> :qe) AS similarity
+                    FROM table_details_embeddings
+                    WHERE 1 - (embedding <=> :qe) > :threshold
+                      {where_group}
+                    ORDER BY similarity DESC
+                    LIMIT :limit
+                """
+                stmt = text(sql).bindparams(bindparam("qe", type_=Vector(dim)))
+                params: Dict[str, Any] = {
+                    "qe": qe_vec,
+                    "threshold": similarity_threshold,
+                    "limit": limit,
+                }
+                if filter_by_grouping:
+                    params["user_grouping"] = user_grouping
+            elif mode == "column":
+                where_group = "AND user_grouping = :user_grouping" if filter_by_grouping else ""
+                sql = f"""
+                    SELECT content AS columns_content,
+                           1 - (embedding <=> :qe) AS similarity
+                    FROM tablecolumn_details_embeddings
+                    WHERE 1 - (embedding <=> :qe) > :threshold
+                      {where_group}
+                    ORDER BY similarity DESC
+                    LIMIT :limit
+                """
+                stmt = text(sql).bindparams(bindparam("qe", type_=Vector(dim)))
+                params = {
+                    "qe": qe_vec,
+                    "threshold": similarity_threshold,
+                    "limit": limit,
+                }
+                if filter_by_grouping:
+                    params["user_grouping"] = user_grouping
+            elif mode == "example":
+                sql = """
+                    SELECT example_user_question, example_generated_sql,
+                           1 - (embedding <=> :qe) AS similarity
+                    FROM example_prompt_sql_embeddings
+                    WHERE 1 - (embedding <=> :qe) > :threshold
+                      AND user_grouping = :user_grouping
+                    ORDER BY similarity DESC
+                    LIMIT :limit
+                """
+                stmt = text(sql).bindparams(bindparam("qe", type_=Vector(dim)))
+                params = {
+                    "qe": qe_vec,
+                    "threshold": similarity_threshold,
+                    "limit": limit,
+                    "user_grouping": user_grouping,
+                }
+            else:
+                raise ValueError("mode must be 'table' | 'column' | 'example'")
+
+            rows = conn.execute(stmt, params).mappings().all()
+
+        results: List[Dict[str, Any]] = []
+        for row in rows:
+            if mode == "example":
+                question = str(row.get("example_user_question", "") or "")
+                sql_text = str(row.get("example_generated_sql", "") or "")
+                document = f"Example question: {question}\nExample SQL: {sql_text}"
+                content = f"\n Example_question: {question}; Example_SQL: {sql_text}"
+            elif mode == "table":
+                document = str(row.get("tables_content", "") or "")
+                content = document
+            else:
+                document = str(row.get("columns_content", "") or "")
+                content = document
+
+            results.append(
+                {
+                    "content": content,
+                    "document": document,
+                    "score": float(row.get("similarity", 0.0) or 0.0),
+                    "source": "dense",
+                }
+            )
+
+        return results
+
+    def _rrf_fusion(
+        self,
+        dense_results: List[Dict[str, Any]],
+        lexical_results: List[Dict[str, Any]],
+        limit: int,
+    ) -> List[Dict[str, Any]]:
+        combined: Dict[str, Dict[str, Any]] = {}
+
+        def _accumulate(items: Iterable[Dict[str, Any]], label: str) -> None:
+            for rank, item in enumerate(items, start=1):
+                key = item["document"]
+                entry = combined.setdefault(
+                    key,
+                    {
+                        "content": item["content"],
+                        "document": item["document"],
+                        "sources": {},
+                        "rrf": 0.0,
+                    },
+                )
+                entry["sources"][label] = {
+                    "rank": rank,
+                    "score": float(item.get("score", 0.0)),
+                }
+                entry["rrf"] += 1.0 / (self._rrf_k + rank)
+
+        if dense_results:
+            _accumulate(dense_results, "dense")
+        if lexical_results:
+            _accumulate(lexical_results, "bm25")
+
+        fused = sorted(combined.values(), key=lambda item: item["rrf"], reverse=True)
+        return fused[:limit]
+
+    def _ensure_cross_encoder(self) -> None:
+        if self._cross_encoder is not None or self._cross_encoder_unavailable:
+            return
+
+        with self._cross_encoder_lock:
+            if self._cross_encoder is not None or self._cross_encoder_unavailable:
+                return
+            try:
+                from sentence_transformers import CrossEncoder
+
+                self._cross_encoder = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+            except Exception as exc:  # pragma: no cover - optional dependency fallback
+                self._cross_encoder_unavailable = True
+                print(f"[LocalPgConnector] CrossEncoder unavailable: {exc}")
+
+    def _cross_encoder_rerank(
+        self,
+        query_text: Optional[str],
+        candidates: List[Dict[str, Any]],
+        top_k: int,
+    ) -> List[Dict[str, Any]]:
+        if not candidates:
+            return []
+
+        if not query_text:
+            return candidates[:top_k]
+
+        self._ensure_cross_encoder()
+        if self._cross_encoder is None:
+            return candidates[:top_k]
+
+        pairs = [(query_text, candidate["document"]) for candidate in candidates]
+        scores = self._cross_encoder.predict(pairs)
+        if isinstance(scores, Sequence):
+            score_iter: Iterable[float] = [float(s) for s in scores]
+        else:  # pragma: no cover - defensive
+            score_iter = [float(scores)]
+
+        for candidate, score in zip(candidates, score_iter):
+            candidate["cross_score"] = score
+
+        reranked = sorted(
+            candidates,
+            key=lambda item: item.get("cross_score", 0.0),
+            reverse=True,
+        )
+        return reranked[:top_k]
+
+    @staticmethod
+    def _format_results(mode: str, candidates: List[Dict[str, Any]]) -> str:
+        if not candidates:
+            return ""
+
+        if mode == "example":
+            return "".join(candidate["content"] for candidate in candidates)
+
+        body = "\n\n".join(candidate["content"] for candidate in candidates)
+        if mode == "table":
+            return "Schema(values): " + body
+        if mode == "column":
+            return "Column name(type): " + body
+        return body
 
     # async def cache_known_sql(self):
     #
@@ -515,99 +876,43 @@ class LocalPgConnector(DBConnector, ABC):
             self,
             mode: str,
             user_grouping: str,
-            qe,  # list / np.ndarray
+            qe,
             similarity_threshold: float,
             limit: int,
             filter_by_grouping: bool = False,
     ):
-        # pgvector: 바인딩 타입 맞추기
-        qe_vec = list(qe)  # ndarray -> list
-        dim = len(qe_vec)
+        query_vector, query_text = self._split_query_payload(qe)
 
-        with self.getconn() as conn:
-            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+        final_k = self._rerank_top_k if limit <= 0 else min(limit, self._rerank_top_k)
+        candidate_limit = max(limit, self._fusion_candidate_k, final_k)
 
-            if mode == "table":
+        dense_results = self._dense_similarity_search(
+            mode,
+            user_grouping,
+            query_vector,
+            similarity_threshold,
+            candidate_limit,
+            filter_by_grouping,
+        )
+        lexical_results = self._lexical_search(
+            mode,
+            user_grouping,
+            query_text,
+            candidate_limit,
+            filter_by_grouping,
+        )
 
-                where_group = "AND user_grouping = :user_grouping" if filter_by_grouping else ""
-                sql = f"""
-                    SELECT content AS tables_content,
-                           1 - (embedding <=> :qe) AS similarity
-                    FROM table_details_embeddings
-                    WHERE 1 - (embedding <=> :qe) > :threshold
-                      {where_group}
-                    ORDER BY similarity DESC
-                    LIMIT :limit
-                """
-                stmt = (
-                    text(sql)
-                    .bindparams(bindparam("qe", type_=Vector(dim)))
-                )
-                params = {"qe": qe_vec, "threshold": similarity_threshold, "limit": limit}
-                if filter_by_grouping:
-                    params["user_grouping"] = user_grouping
+        fused_candidates = self._rrf_fusion(dense_results, lexical_results, candidate_limit)
+        final_candidates = self._cross_encoder_rerank(query_text, fused_candidates, final_k)
 
-            elif mode == "column":
-                where_group = "AND user_grouping = :user_grouping" if filter_by_grouping else ""
-                sql = f"""
-                    SELECT content AS columns_content,
-                           1 - (embedding <=> :qe) AS similarity
-                    FROM tablecolumn_details_embeddings
-                    WHERE 1 - (embedding <=> :qe) > :threshold
-                      {where_group}
-                    ORDER BY similarity DESC
-                    LIMIT :limit
-                """
-                stmt = (
-                    text(sql)
-                    .bindparams(bindparam("qe", type_=Vector(dim)))
-                )
-                params = {"qe": qe_vec, "threshold": similarity_threshold, "limit": limit}
-                if filter_by_grouping:
-                    params["user_grouping"] = user_grouping
+        if not final_candidates:
+            fallback = dense_results[:limit] if dense_results else lexical_results[:limit]
+            if not fallback:
+                return []
+            final_candidates = fallback
 
-            elif mode == "example":
-                sql = """
-                    SELECT user_grouping, example_user_question, example_generated_sql,
-                           1 - (embedding <=> :qe) AS similarity
-                    FROM example_prompt_sql_embeddings
-                    WHERE 1 - (embedding <=> :qe) > :threshold
-                      AND user_grouping = :user_grouping
-                    ORDER BY similarity DESC
-                    LIMIT :limit
-                """
-
-                stmt = (
-                    text(sql)
-                    .bindparams(bindparam("qe", type_=Vector(dim)))
-                )
-                params = {
-                    "qe": qe_vec,
-                    "threshold": similarity_threshold,
-                    "limit": limit,
-                    "user_grouping": user_grouping,
-                }
-            else:
-                raise ValueError("mode must be 'table' | 'column' | 'example'")
-
-            # ✅ 딕셔너리 모드로 받기
-            rows = conn.execute(stmt, params).mappings().all()
-
-        if not rows:
-            return [""]
-
-        if mode == "table":
-            lines = [r["tables_content"] for r in rows]
-            return ["Schema(values): " + "\n\n".join(lines)]
-        if mode == "column":
-            lines = [r["columns_content"] for r in rows]
-            return ["Column name(type): " + "\n\n".join(lines)]
-        if mode == "example":
-            parts = [
-                f"\n Example_question: {r['example_user_question']}; Example_SQL: {r['example_generated_sql']}"
-                for r in rows
-            ]
-            return ["".join(parts)]
+        formatted = self._format_results(mode, final_candidates)
+        return [formatted] if formatted else []
 
     async def getSimilarMatches(self, mode, user_grouping, qe, num_matches, similarity_threshold):
 
