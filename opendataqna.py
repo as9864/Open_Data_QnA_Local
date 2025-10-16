@@ -389,6 +389,7 @@ async def generate_sql(session_id,
                 error_msg,
                 AUDIT_TEXT,
             )
+        raise e;
 
     if USE_SESSION_HISTORY and not invalid_response:
         await asyncio.to_thread(

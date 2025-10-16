@@ -353,6 +353,9 @@ async def _process_chat_request(body: dict) -> None:
                 user_grouping,
                 question,
             )
+            print("final_sql : "  , final_sql)
+            print("results_df : ", results_df)
+            print("response : ", response)
             # answer: 자연어 응답 우선, 없으면 SQL/row수 보조
             if response:
                 answer_text = str(response)
