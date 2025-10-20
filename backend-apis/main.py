@@ -16,45 +16,48 @@
 # limitations under the License.
 
 
-from flask import Flask, request, jsonify, render_template, Response
 import asyncio
-import threading
-from collections.abc import Callable
-import logging as log
-import json
 import datetime
-import urllib
-import re
-import time
-import textwrap
-import pandas as pd
-from flask_cors import CORS
-import os
-import sys
-from functools import wraps
-
-from typing import Any, Dict, List, Optional
-from concurrent.futures import Future
-
-from embeddings.store_papers import _prepare_records, store_papers, _pg_connect
-from agents import EmbedderAgent
-from pgvector.psycopg import register_vector
-from dbconnectors import audit_pgconnector
-
-
-from services.chat import generate_sql_results as chat_generate_sql_results
-from services.omop_concept_chat import run as concept_chat_run
-
-
-from agents.Agent_local import LocalOllamaResponder as ResponderClass
-
-
-import os
 import json
 import logging as log
-import requests
+import os
+import re
+import sys
+import textwrap
+import threading
+import time
+import urllib
+from collections.abc import Callable
+from concurrent.futures import Future
+from functools import wraps
+from typing import Any, Dict, List, Optional
 
-from utilities import CALL_BACK_URL , CHAT_MODEL, CHAT_MODEL_URL , LOCAL_AUTH_TOKEN
+import pandas as pd
+import requests
+from flask import Flask, Response, jsonify, render_template, request
+from flask_cors import CORS
+
+from agents import EmbedderAgent
+from agents.Agent_local import LocalOllamaResponder as ResponderClass
+from dbconnectors import audit_pgconnector
+from embeddings.store_papers import _pg_connect, _prepare_records, store_papers
+from pgvector.psycopg import register_vector
+from services.chat import generate_sql_results as chat_generate_sql_results
+from services.faq_cache import FaqMatchCache, MatchResult
+from services.omop_concept_chat import run as concept_chat_run
+from utilities import (
+    CALL_BACK_URL,
+    CHAT_MODEL,
+    CHAT_MODEL_URL,
+    EMBEDDING_MODEL,
+    EMBEDDING_MODEL_PATH,
+    FAQ_CACHE_EMBEDDING_MODEL,
+    FAQ_CACHE_HISTORY_THRESHOLD,
+    FAQ_CACHE_MAX_DYNAMIC,
+    FAQ_CACHE_PATH,
+    FAQ_CACHE_THRESHOLD,
+    LOCAL_AUTH_TOKEN,
+)
 
 
 
@@ -98,6 +101,31 @@ _chat_sessions: dict[str, str] = {}
 
 BACKGROUND_LOOP = asyncio.new_event_loop()
 threading.Thread(target=BACKGROUND_LOOP.run_forever, daemon=True).start()
+
+
+def _resolve_faq_embedding_model() -> str:
+    if FAQ_CACHE_EMBEDDING_MODEL:
+        return FAQ_CACHE_EMBEDDING_MODEL
+    if EMBEDDING_MODEL_PATH:
+        return EMBEDDING_MODEL_PATH
+    if EMBEDDING_MODEL:
+        return EMBEDDING_MODEL
+    return "BAAI/bge-m3"
+
+
+def _faq_embedder_factory() -> EmbedderAgent:
+    return EmbedderAgent("local", _resolve_faq_embedding_model())
+
+
+FAQ_CACHE = FaqMatchCache(
+    embedder_factory=_faq_embedder_factory,
+    threshold=FAQ_CACHE_THRESHOLD,
+    history_threshold=FAQ_CACHE_HISTORY_THRESHOLD,
+    max_dynamic_entries=FAQ_CACHE_MAX_DYNAMIC,
+)
+
+if FAQ_CACHE_PATH:
+    FAQ_CACHE.load_static_file(FAQ_CACHE_PATH)
 
 
 def _get_chat_history(chat_id: str) -> List[Dict[str, Any]]:
@@ -167,6 +195,13 @@ def _remember_exchange(
         "timestamp": recorded_at.isoformat() + "Z",
         "sessionId": session_id,
     }
+
+    FAQ_CACHE.remember(
+        entry["question"],
+        entry["answer"],
+        question_type=question_type,
+        chat_id=chat_id,
+    )
 
     history = _get_chat_history(chat_id)
     history.append(entry)
@@ -345,6 +380,29 @@ async def _process_chat_request(body: dict) -> None:
         session_id: Optional[str] = None
         if chat_id:
             session_id, _ = _resolve_chat_session(chat_id, body.get("session_id"))
+
+        cache_hit: Optional[MatchResult] = None
+        if question:
+            cache_hit = await asyncio.to_thread(
+                FAQ_CACHE.match_question,
+                question,
+                qtype,
+                chat_id,
+            )
+
+        if cache_hit:
+            answer_text = cache_hit.answer
+            await asyncio.to_thread(
+                _remember_exchange,
+                chat_id,
+                qtype,
+                question,
+                answer_text,
+                session_id,
+            )
+            await asyncio.to_thread(_post_callback, chat_id, answer_text, "DONE")
+            return
+
         if qtype == 1:
             # ----- /query/text2sql 로직 호출 -----
             history = await _get_chat_history_async(chat_id)

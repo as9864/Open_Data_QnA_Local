@@ -170,6 +170,30 @@ KNOWN_GOOD_SQL_PATH = config.get(
     fallback=_default_known_good_sql_path(),
 )
 
+_FAQ_SECTION = "FAQ_CACHE"
+FAQ_CACHE_PATH = config.get(_FAQ_SECTION, "PATH", fallback="").strip()
+if FAQ_CACHE_PATH and not os.path.isabs(FAQ_CACHE_PATH):
+    FAQ_CACHE_PATH = os.path.join(root_dir, FAQ_CACHE_PATH)
+
+def _getfloat(section: str, option: str, fallback: float) -> float:
+    value = config.get(section, option, fallback=str(fallback))
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(fallback)
+
+def _getint(section: str, option: str, fallback: int) -> int:
+    value = config.get(section, option, fallback=str(fallback))
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return int(fallback)
+
+FAQ_CACHE_THRESHOLD = _getfloat(_FAQ_SECTION, "THRESHOLD", 0.86)
+FAQ_CACHE_HISTORY_THRESHOLD = _getfloat(_FAQ_SECTION, "HISTORY_THRESHOLD", 0.8)
+FAQ_CACHE_MAX_DYNAMIC = _getint(_FAQ_SECTION, "MAX_DYNAMIC_ENTRIES", 200)
+FAQ_CACHE_EMBEDDING_MODEL = config.get(_FAQ_SECTION, "EMBEDDING_MODEL", fallback="").strip()
+
 
 
 __all__ = [
@@ -217,4 +241,9 @@ __all__ = [
     "RESPONSE_EDITOR_MAX_TOKENS",
     "LOCAL_AUTH_TOKEN",
     "KNOWN_GOOD_SQL_PATH",
+    "FAQ_CACHE_PATH",
+    "FAQ_CACHE_THRESHOLD",
+    "FAQ_CACHE_HISTORY_THRESHOLD",
+    "FAQ_CACHE_MAX_DYNAMIC",
+    "FAQ_CACHE_EMBEDDING_MODEL",
 ]
