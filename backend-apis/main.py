@@ -42,6 +42,7 @@ from agents.Agent_local import LocalOllamaResponder as ResponderClass
 from dbconnectors import audit_pgconnector
 from embeddings.store_papers import _pg_connect, _prepare_records, store_papers
 from pgvector.psycopg import register_vector
+from services.answer_refiner import ANSWER_REFINER
 from services.chat import generate_sql_results as chat_generate_sql_results
 from services.faq_cache import FaqMatchCache, MatchResult
 from services.omop_concept_chat import run as concept_chat_run
@@ -374,6 +375,7 @@ async def _process_chat_request(body: dict) -> None:
         summarize = bool(body.get("summarize", True))
 
         answer_text = ""
+        evidence_payload: Optional[Any] = None
 
 
 
@@ -417,6 +419,18 @@ async def _process_chat_request(body: dict) -> None:
             else:
                 rows = (len(results_df) if hasattr(results_df, "__len__") else 0)
                 answer_text = f"SQL 생성 완료. rows={rows}\n{final_sql}"
+            if hasattr(results_df, "head") and callable(results_df.head):
+                preview_df = results_df.head(5)
+                try:
+                    preview_df = preview_df.replace({pd.NA: None})
+                except Exception:
+                    pass
+                evidence_payload = {
+                    "sql": final_sql,
+                    "results_preview": preview_df.to_dict(orient="records"),
+                }
+            else:
+                evidence_payload = {"sql": final_sql}
         elif qtype == 2:
             # ----- /omop/concept_chat 로직 호출 -----
             history = await _get_chat_history_async(chat_id)
@@ -427,6 +441,7 @@ async def _process_chat_request(body: dict) -> None:
                               or payload.get("text") or json.dumps(payload, ensure_ascii=False)
             else:
                 answer_text = str(payload)
+            evidence_payload = payload
         elif qtype == 3:
             # ----- /papers/search 로직 호출 (요약 있으면 사용) -----
             history = await _get_chat_history_async(chat_id)
@@ -472,9 +487,23 @@ async def _process_chat_request(body: dict) -> None:
                 titles = [x.get("title") for x in results if x.get("title")]
                 answer_text = "검색 결과:\n- " + "\n- ".join(titles)
 
+            evidence_payload = {
+                "results": results,
+                "summarize": summarize,
+            }
+
 
         else:
             raise ValueError(f"Unsupported questionType: {qtype}")
+
+        answer_text = ANSWER_REFINER.refine(
+            question=question or "",
+            draft_response=answer_text,
+            evidence=evidence_payload,
+            instructions=(
+                "초안 응답을 사실성, 간결성, 한국어 가독성 관점에서 검토하고 필요한 부분만 다듬어 주세요."
+            ),
+        )
 
         await asyncio.to_thread(
             _remember_exchange,
