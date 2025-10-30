@@ -164,6 +164,8 @@ class LocalOllamaResponder:
         }
 
         try:
+            print("Agent_local payload",payload)
+            print("Agent_local url", self.url)
             res = requests.post(self.url, json=payload, timeout=60)
             res.raise_for_status()
             text = (res.json() or {}).get("response", "").strip()

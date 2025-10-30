@@ -71,6 +71,43 @@ class ResponseAgent:
         text = re.sub(r"<Thought\b[^>]*>.*", "", text, flags=re.S)
         return text.strip()
 
+    def generate_llm_response(self, prompt: str) -> str:
+        """
+        외부에서 바로 호출 가능한 단일-프롬프트 응답생성 엔트리포인트.
+        1) draft 모델/호스트로 시도
+        2) 실패 시 editor 모델/호스트로 폴백 (editor_model 설정된 경우)
+        3) 둘 다 실패하면 예외를 다시 던짐
+        """
+        # 1) 1차 시도: draft
+        try:
+            return self._generate_with_model(
+                prompt=prompt,
+                model=self.draft_model,
+                host=self.draft_host,
+                temperature=self.temperature,
+                top_p=self.top_p,
+                max_tokens=self.max_tokens,
+            )
+        except Exception as draft_exc:
+            print(f"[ResponseAgentLocal] Draft model call failed: {draft_exc}")
+
+            # 2) 2차 시도: editor (설정된 경우에만)
+            if self.editor_model:
+                try:
+                    return self._generate_with_model(
+                        prompt=prompt,
+                        model=self.editor_model,
+                        host=self.editor_host,
+                        temperature=self.editor_temperature,
+                        top_p=self.top_p,
+                        max_tokens=self.editor_max_tokens,
+                    )
+                except Exception as editor_exc:
+                    print(f"[ResponseAgentLocal] Editor model fallback also failed: {editor_exc}")
+
+            # 3) 최종 실패: 원래 예외 다시 전달
+            raise
+
     def _generate_with_model(
         self,
         *,

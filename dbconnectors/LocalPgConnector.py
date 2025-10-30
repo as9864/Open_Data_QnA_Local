@@ -24,6 +24,10 @@ from pgvector.sqlalchemy import Vector
 
 from .core import DBConnector
 
+from collections.abc import Sequence
+from typing import Iterable, List
+
+
 try:
     from rank_bm25 import BM25Okapi
 except ImportError:  # pragma: no cover - optional dependency fallback
@@ -64,6 +68,26 @@ def _normalize_sqlalchemy_conn_str(conn_str: str) -> str:
 
     return conn_str
 
+
+def _to_float_list(scores) -> List[float]:
+    # torch.Tensor 처리를 최우선으로
+    if hasattr(scores, "detach"):  # torch tensor
+        scores = scores.detach().cpu().numpy()
+
+    try:
+        import numpy as np
+        # numpy 배열/스칼라 모두 numpy로 통일
+        arr = np.asarray(scores)
+        if arr.ndim == 0:  # 스칼라
+            return [float(arr)]
+        # 길이가 있는 배열/시퀀스 -> 1차원으로 평탄화 후 float 변환
+        return [float(x) for x in arr.ravel().tolist()]
+    except Exception:
+        # list/tuple 같은 파이썬 시퀀스 처리
+        if isinstance(scores, (list, tuple)):
+            return [float(s) for s in scores]
+        # 그 외 단일 값으로 가정
+        return [float(scores)]
 
 class LocalPgConnector(DBConnector, ABC):
     """Connector for a local PostgreSQL database.
@@ -284,6 +308,7 @@ class LocalPgConnector(DBConnector, ABC):
 
         return results
 
+
     def _dense_similarity_search(
         self,
         mode: str,
@@ -442,6 +467,10 @@ class LocalPgConnector(DBConnector, ABC):
                 self._cross_encoder_unavailable = True
                 print(f"[LocalPgConnector] CrossEncoder unavailable: {exc}")
 
+
+
+
+
     def _cross_encoder_rerank(
         self,
         query_text: Optional[str],
@@ -460,11 +489,11 @@ class LocalPgConnector(DBConnector, ABC):
 
         pairs = [(query_text, candidate["document"]) for candidate in candidates]
         scores = self._cross_encoder.predict(pairs)
-        if isinstance(scores, Sequence):
-            score_iter: Iterable[float] = [float(s) for s in scores]
-        else:  # pragma: no cover - defensive
-            score_iter = [float(scores)]
-
+        # if isinstance(scores, Sequence):
+        #     score_iter: Iterable[float] = [float(s) for s in scores]
+        # else:  # pragma: no cover - defensive
+        #     score_iter = [float(scores)]
+        score_iter = _to_float_list(scores)
         for candidate, score in zip(candidates, score_iter):
             candidate["cross_score"] = score
 

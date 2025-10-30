@@ -104,7 +104,7 @@ class AnswerRefiner:
             evidence=evidence,
             instructions=instructions,
         )
-
+        print("answer_refiner prompt", prompt)
         payload = {
             "model": self.config.model,
             "prompt": prompt,
@@ -115,14 +115,16 @@ class AnswerRefiner:
             "stop": ["<think>", "</think>", "<analysis>", "</analysis>", "<Thought>", "</Thought>"],
             "stream": False,
         }
-
+        print("answer_refiner payload", payload)
         url = f"{self.config.host}/api/generate"
+        print("answer_refiner url", url)
         try:
             response = requests.post(
                 url,
                 json=payload,
                 timeout=self.config.timeout_sec,
             )
+            print("answer_refiner response", response)
             response.raise_for_status()
             data = response.json() if response.content else {}
             refined = (data.get("response") or "").strip()
