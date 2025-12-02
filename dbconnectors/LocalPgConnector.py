@@ -209,7 +209,10 @@ class LocalPgConnector(DBConnector, ABC):
 
         with self.getconn() as conn:
             if mode == "table":
-                where_group = "WHERE user_grouping = :user_grouping" if filter_by_grouping else ""
+                where_group = "WHERE user_grouping = :user_grouping" if filter_by_grouping else "WHERE 1=1"
+                # Customization: Exclude specific tables from the search
+                excluded_tables = "'visit_detail'"
+                where_group += f" AND table_name NOT IN ({excluded_tables})"
                 sql = f"""
                     SELECT content
                     FROM table_details_embeddings
@@ -220,7 +223,10 @@ class LocalPgConnector(DBConnector, ABC):
                 if filter_by_grouping:
                     params["user_grouping"] = user_grouping
             elif mode == "column":
-                where_group = "WHERE user_grouping = :user_grouping" if filter_by_grouping else ""
+                where_group = "WHERE user_grouping = :user_grouping" if filter_by_grouping else "WHERE 1=1"
+                # Customization: Exclude specific tables from the search
+                excluded_tables = "'visit_detail'"
+                where_group += f" AND table_name NOT IN ({excluded_tables})"
                 sql = f"""
                     SELECT content
                     FROM tablecolumn_details_embeddings
@@ -335,6 +341,9 @@ class LocalPgConnector(DBConnector, ABC):
 
             if mode == "table":
                 where_group = "AND user_grouping = :user_grouping" if filter_by_grouping else ""
+                # Customization: Exclude specific tables from the search
+                excluded_tables = "'visit_detail'"
+                where_group += f" AND table_name NOT IN ({excluded_tables})"
                 sql = f"""
                     SELECT content AS tables_content,
                            1 - (embedding <=> :qe) AS similarity
@@ -354,6 +363,9 @@ class LocalPgConnector(DBConnector, ABC):
                     params["user_grouping"] = user_grouping
             elif mode == "column":
                 where_group = "AND user_grouping = :user_grouping" if filter_by_grouping else ""
+                # Customization: Exclude specific tables from the search
+                excluded_tables = "'visit_detail'"
+                where_group += f" AND table_name NOT IN ({excluded_tables})"
                 sql = f"""
                     SELECT content AS columns_content,
                            1 - (embedding <=> :qe) AS similarity

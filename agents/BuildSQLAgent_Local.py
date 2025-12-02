@@ -22,6 +22,7 @@ class BuildSQLAgent_Local:
         host: str = CHAT_MODEL_URL,
         max_tokens: int = 1024,
         temperature: float = 0.2,
+        
         top_p: float = 1.0,
         # Ollama에는 top_k 옵션이 직접 없지만 인터페이스 유지를 위해 둠
         timeout_sec: int = 300,

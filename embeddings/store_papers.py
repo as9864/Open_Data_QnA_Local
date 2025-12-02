@@ -277,6 +277,60 @@ def store_papers(records: List[Tuple[str, str, str, str, List[float]]]) -> int:
         conn.commit()
     return len(records)
 
+def reembed_existing_records(limit: Optional[int] = None):
+    """
+    DB 내 기존 papers_embeddings 레코드에서 embedding을 새로 생성 후 UPDATE.
+    limit이 주어지면 해당 개수만 업데이트.
+    """
+    embedder = EmbedderAgent("local", "BAAI/bge-m3")
+
+    with _pg_connect() as conn:
+        register_vector(conn)
+        with conn.cursor() as cur:
+
+            # 기존 레코드 읽기
+            sql = """
+                SELECT id, title, abstract, metadata
+                FROM papers_embeddings
+                WHERE embedding IS NULL
+            """
+            if limit:
+                sql += " LIMIT %s"
+                cur.execute(sql, (limit,))
+            else:
+                cur.execute(sql)
+
+            rows = cur.fetchall()
+
+            if not rows:
+                print("[INFO] No records need re-embedding.")
+                return 0
+
+            updates = []
+            for _id, title, abstract, metadata in rows:
+                text = " ".join(filter(None, [title, abstract])) or ""
+                if not text.strip():
+                    print(f"[WARN] Empty text for id={_id}, skip.")
+                    continue
+
+                emb = embedder.create(text)
+                updates.append((_id, emb))
+
+            # embedding 업데이트
+            cur.executemany(
+                """
+                UPDATE papers_embeddings
+                SET embedding = %s
+                WHERE id = %s;
+                """,
+                [(emb, _id) for (_id, emb) in updates]
+            )
+
+        conn.commit()
+
+    print(f"[OK] Updated embedding for {len(updates)} records.")
+    return len(updates)
+
 
 # ---------------------------------------------------------------------------
 # CLI
@@ -298,5 +352,16 @@ def main(argv: List[str] | None = None) -> None:
     print(f"Inserted {n} papers into papers_embeddings")
 
 
+def reembedMain():
+    parser = argparse.ArgumentParser(description="Store paper embeddings (JSON or PDF)")
+    parser.add_argument("--reembed", action="store_true",
+                        help="Re-embed existing DB rows that have NULL embeddings")
+    # args = parser.parse_args(argv)
+
+    commitLength = reembed_existing_records()
+
+    print(f"Inserted {commitLength} papers into papers_embeddings")
+
 if __name__ == "__main__":
-    main()
+    # main()
+    reembedMain()

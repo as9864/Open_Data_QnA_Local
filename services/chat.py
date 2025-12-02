@@ -45,7 +45,7 @@ async def generate_sql_results(session_id: str | None, selected_schema: str, use
     from opendataqna import run_pipeline, generate_uuid
 
     session_id = session_id or generate_uuid()
-    final_sql, results_df, response = await run_pipeline(
+    final_sql, results_df, response, invalid_response = await run_pipeline(
         session_id,
         user_question,
         selected_schema,
@@ -53,4 +53,4 @@ async def generate_sql_results(session_id: str | None, selected_schema: str, use
     )
     if not isinstance(results_df, pd.DataFrame):
         results_df = pd.DataFrame([])
-    return final_sql, results_df, response
+    return final_sql, results_df, response, invalid_response

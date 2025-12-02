@@ -376,6 +376,7 @@ async def _process_chat_request(body: dict) -> None:
 
         answer_text = ""
         evidence_payload: Optional[Any] = None
+        is_successful = True
 
 
 
@@ -408,11 +409,13 @@ async def _process_chat_request(body: dict) -> None:
         if qtype == 1:
             # ----- /query/text2sql 로직 호출 -----
             history = await _get_chat_history_async(chat_id)
-            final_sql, results_df, response = await chat_generate_sql_results(
+            final_sql, results_df, response, invalid_response = await chat_generate_sql_results(
                 session_id,
                 user_grouping,
                 question,
             )
+            if invalid_response:
+                is_successful = False
             # answer: 자연어 응답 우선, 없으면 SQL/row수 보조
             if response:
                 answer_text = str(response)
@@ -432,16 +435,56 @@ async def _process_chat_request(body: dict) -> None:
             else:
                 evidence_payload = {"sql": final_sql}
         elif qtype == 2:
-            # ----- /omop/concept_chat 로직 호출 -----
+            # ----- /omop/concept_chat 로직 호출 (임베딩 검색으로 수정) -----
             history = await _get_chat_history_async(chat_id)
-            payload = await concept_chat_run(question, top_k=int(top_k), history=history)
-            # payload에서 문자열 응답 필드 우선 추출
-            if isinstance(payload, dict):
-                answer_text = payload.get("answer") or payload.get("message") \
-                              or payload.get("text") or json.dumps(payload, ensure_ascii=False)
+            embedder = EmbedderAgent("local", _resolve_faq_embedding_model())
+            query_emb = await asyncio.to_thread(embedder.create, question)
+
+            def _query_concepts() -> list[tuple[Any, ...]]:
+                with _pg_connect() as conn:
+                    register_vector(conn)
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            SELECT concept_id, concept_name, domain_id, vocabulary_id, concept_class_id, concept_code
+                            FROM public.concept
+                            WHERE embedding IS NOT NULL
+                            ORDER BY embedding <=> %s::vector
+                            LIMIT %s;
+                            """,
+                            (query_emb, int(top_k)),
+                        )
+                        return cur.fetchall()
+
+            rows = await asyncio.to_thread(_query_concepts)
+
+            results = [
+                {
+                    "concept_id": r[0], "concept_name": r[1], "domain_id": r[2],
+                    "vocabulary_id": r[3], "concept_class_id": r[4], "concept_code": r[5]
+                }
+                for r in rows
+            ]
+
+            if not results:
+                is_successful = False
+
+            if summarize and results:
+                try:
+                    contextual_question = _apply_history_to_question(question, history)
+                    answer_text = await asyncio.to_thread(
+                        Responder.run_concept_search,
+                        contextual_question,
+                        json.dumps(results, ensure_ascii=False),
+                    )
+                except Exception:
+                    concept_names = [x.get("concept_name") for x in results if x.get("concept_name")]
+                    answer_text = "검색 결과:\n- " + "\n- ".join(concept_names)
             else:
-                answer_text = str(payload)
-            evidence_payload = payload
+                concept_names = [x.get("concept_name") for x in results if x.get("concept_name")]
+                answer_text = "검색 결과:\n- " + "\n- ".join(concept_names)
+
+            evidence_payload = {"results": results, "summarize": summarize}
         elif qtype == 3:
             # ----- /papers/search 로직 호출 (요약 있으면 사용) -----
             history = await _get_chat_history_async(chat_id)
@@ -470,6 +513,9 @@ async def _process_chat_request(body: dict) -> None:
                 for r in rows
             ]
 
+            if not results:
+                is_successful = False
+
             # 요약이 켜져 있으면 요약 생성(가능하면)
             if summarize and results:
                 try:
@@ -494,6 +540,7 @@ async def _process_chat_request(body: dict) -> None:
 
 
         else:
+            is_successful = False
             raise ValueError(f"Unsupported questionType: {qtype}")
 
         answer_text = ANSWER_REFINER.refine(
@@ -505,14 +552,15 @@ async def _process_chat_request(body: dict) -> None:
             ),
         )
 
-        await asyncio.to_thread(
-            _remember_exchange,
-            chat_id,
-            qtype,
-            question,
-            answer_text,
-            session_id,
-        )
+        if is_successful:
+            await asyncio.to_thread(
+                _remember_exchange,
+                chat_id,
+                qtype,
+                question,
+                answer_text,
+                session_id,
+            )
 
         # ---- 콜백 전송 ----
         await asyncio.to_thread(_post_callback, chat_id, answer_text, "DONE")
@@ -706,7 +754,7 @@ async def chat():
         uid = getattr(request, "uid", "unknown")
         log.info("/chat request - uid=%s session_id=%s time=%s", uid, session_id, datetime.datetime.utcnow().isoformat())
 
-        final_sql, results_df, response = await chat_generate_sql_results(
+        final_sql, results_df, response, _ = await chat_generate_sql_results(
             session_id,
             user_grouping,
             user_question,

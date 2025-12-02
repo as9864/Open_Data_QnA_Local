@@ -268,6 +268,10 @@ async def generate_sql(session_id,
                     num_sql_matches,
                     example_similarity_threshold,
                 )
+                print("--- SIMILARITY SEARCH DEBUG ---")
+                print(f"User Question: {user_question}")
+                print(f"Found Similar SQL Examples: {similar_sql}")
+                print("-----------------------------")
 
             else:
                 similar_sql = "No similar SQLs provided..."
@@ -654,7 +658,7 @@ async def run_pipeline(session_id,
         results_df=final_sql
         _resp=final_sql
 
-    return final_sql, results_df, _resp
+    return final_sql, results_df, _resp, invalid_response
 
 
 ############################
